@@ -105,15 +105,18 @@ type MediaUploadService struct {
 
 // NewMediaUploadService 创建媒体上传服务
 func NewMediaUploadService(db *gorm.DB, redisClient *redis.Client) (*MediaUploadService, error) {
-	// 初始化 COS 客户端
-	conf := &config.COSConfig
-	u, _ := cos.NewURL(conf.Region, conf.Bucket)
-	client := cos.NewClient(u, &http.Client{
-		Transport: &cos.AuthorizationTransport{
-			SecretID:  conf.SecretID,
-			SecretKey: conf.SecretKey,
-		},
-	})
+	// 初始化 COS 客户端 - 使用存根实现，生产环境需要配置真实的 COS
+	var client *cos.Client
+	conf := config.COSConfig
+	if conf.SecretID != "" && conf.SecretKey != "" {
+		u, _ := cos.NewURL(conf.Region, conf.Bucket)
+		client = cos.NewClient(u, &http.Client{
+			Transport: &cos.AuthorizationTransport{
+				SecretID:  conf.SecretID,
+				SecretKey: conf.SecretKey,
+			},
+		})
+	}
 
 	return &MediaUploadService{
 		db:          db,
@@ -169,15 +172,15 @@ func (s *MediaUploadService) Upload(ctx context.Context, req *UploadRequest) (*U
 	uuid := generateUUID()
 	key := fmt.Sprintf("media/%s/%s%s", req.Type, uuid, ext)
 
-	// 5. 根据类型处理文件
+	// 5. 根据类型处理文件（传递 req.File 以便获取文件信息）
 	var resp *UploadResponse
 	switch req.Type {
 	case models.MediaTypeImage:
-		resp, err = s.processImage(ctx, file, key, ext)
+		resp, err = s.processImage(ctx, req.File, key, ext)
 	case models.MediaTypeVoice:
-		resp, err = s.processVoice(ctx, file, key, ext)
+		resp, err = s.processVoice(ctx, req.File, key, ext)
 	case models.MediaTypeVideo:
-		resp, err = s.processVideo(ctx, file, key, ext)
+		resp, err = s.processVideo(ctx, req.File, key, ext)
 	default:
 		return nil, ErrInvalidMediaType
 	}
@@ -315,9 +318,9 @@ func (s *MediaUploadService) validateFileSize(file *multipart.FileHeader, mediaT
 }
 
 // processImage 处理图片
-func (s *MediaUploadService) processImage(ctx context.Context, file multipart.File, key, ext string) (*UploadResponse, error) {
-	// 重新打开文件（validateFileType 已关闭）
-	f, err := file.(*multipart.FileHeader).Open()
+func (s *MediaUploadService) processImage(ctx context.Context, file *multipart.FileHeader, key, ext string) (*UploadResponse, error) {
+	// 打开文件
+	f, err := file.Open()
 	if err != nil {
 		return nil, err
 	}
@@ -335,14 +338,14 @@ func (s *MediaUploadService) processImage(ctx context.Context, file multipart.Fi
 
 	// 生成缩略图
 	thumbnailKey := strings.Replace(key, ext, "_thumb"+ext, 1)
-	thumbnailURL, err := s.generateThumbnail(ctx, img, thumbnailKey, format)
+	_, err = s.generateThumbnail(ctx, img, thumbnailKey, format)
 	if err != nil {
 		return nil, err
 	}
 
 	return &UploadResponse{
 		Type:     string(models.MediaTypeImage),
-		Size:     file.(*multipart.FileHeader).Size,
+		Size:     file.Size,
 		Width:    width,
 		Height:   height,
 		Format:   format,
@@ -357,9 +360,6 @@ func (s *MediaUploadService) generateThumbnail(ctx context.Context, img image.Im
 	// 简单的缩放（实际应使用更智能的裁剪算法）
 	bounds := img.Bounds()
 	scale := float64(200) / float64(max(bounds.Dx(), bounds.Dy()))
-
-	newWidth := int(float64(bounds.Dx()) * scale)
-	newHeight := int(float64(bounds.Dy()) * scale)
 
 	// 使用近邻插值（简单快速）
 	for y := 0; y < 200; y++ {
@@ -378,8 +378,8 @@ func (s *MediaUploadService) generateThumbnail(ctx context.Context, img image.Im
 
 	// 编码缩略图
 	var buf bytes.Buffer
-	encoder := jpeg.EncodeOptions{Quality: 80}
-	if err := jpeg.Encode(&buf, thumb, &encoder); err != nil {
+	encoder := &jpeg.Options{Quality: 80}
+	if err := jpeg.Encode(&buf, thumb, encoder); err != nil {
 		return "", err
 	}
 
@@ -402,18 +402,18 @@ func (s *MediaUploadService) processVoice(ctx context.Context, file multipart.Fi
 	// 实际项目中可以使用 ffmpeg 获取时长等信息
 	return &UploadResponse{
 		Type:   string(models.MediaTypeVoice),
-		Size:   file.(*multipart.FileHeader).Size,
+		Size:   file.Size,
 		Format: strings.TrimPrefix(ext, "."),
 	}, nil
 }
 
 // processVideo 处理视频
-func (s *MediaUploadService) processVideo(ctx context.Context, file multipart.File, key, ext string) (*UploadResponse, error) {
+func (s *MediaUploadService) processVideo(ctx context.Context, file *multipart.FileHeader, key, ext string) (*UploadResponse, error) {
 	// 视频处理需要 ffmpeg，这里简化处理
 	// 实际项目中应使用 ffmpeg 获取信息并生成封面
 	return &UploadResponse{
 		Type:   string(models.MediaTypeVideo),
-		Size:   file.(*multipart.FileHeader).Size,
+		Size:   file.Size,
 		Format: strings.TrimPrefix(ext, "."),
 	}, nil
 }

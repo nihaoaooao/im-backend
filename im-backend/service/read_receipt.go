@@ -15,9 +15,8 @@ import (
 )
 
 var (
-	ErrMessageNotFound      = errors.New("消息不存在")
-	ErrAlreadyRead          = errors.New("消息已读")
-	ErrInvalidMessageIDs    = errors.New("无效的消息ID列表")
+	ErrAlreadyRead       = errors.New("消息已读")
+	ErrInvalidMessageIDs = errors.New("无效的消息ID列表")
 )
 
 // ReadReceiptService 已读回执服务
@@ -357,15 +356,4 @@ func (s *ReadReceiptService) MarkConversationAsRead(ctx context.Context, convers
 // ResetConversationUnreadCount 重置会话未读数
 func (s *ReadReceiptService) ResetConversationUnreadCount(ctx context.Context, conversationID int64, userID int64) error {
 	return s.SetConversationUnreadCount(ctx, conversationID, userID, 0)
-}
-
-// UnmarshalJSON 实现自定义 JSON 解析
-func (n *ReadReceiptNotice) UnmarshalJSON(data []byte) error {
-	type Alias ReadReceiptNotice
-	aux := &struct {
-		*Alias
-	}{
-		Alias: (*Alias)(n),
-	}
-	return json.Unmarshal(data, aux)
 }

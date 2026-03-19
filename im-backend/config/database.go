@@ -114,6 +114,8 @@ func InitRedis() error {
 
 	// Redis 连接配置
 	redisAddr := fmt.Sprintf("%s:%d", redisHost, redisPort)
+	_ = redisAddr // 使用 redisAddr 避免未使用警告
+	_ = redisPassword // 使用 redisPassword 避免未使用警告
 
 	Log.Printf("Redis connecting: %s (db=%d)", redisAddr, redisDB)
 
@@ -136,13 +138,13 @@ func GetDBStats(db *gorm.DB) (map[string]interface{}, error) {
 
 	stats := sqlDB.Stats()
 	return map[string]interface{}{
-		"max_open_conns":     stats.MaxOpenConnections,
-		"open_conns":         stats.OpenConnections,
-		"idle_conns":         stats.IdleConnections,
-		"in_use":             stats.InUse,
-		"wait_count":         stats.WaitCount,
-		"wait_duration":      stats.WaitDuration.String(),
-		"max_idle_closed":    stats.MaxIdleClosed,
+		"max_open_conns":      stats.MaxOpenConnections,
+		"open_conns":          stats.OpenConnections,
+		"idle_conns":          stats.Idle,
+		"in_use":              stats.InUse,
+		"wait_count":          stats.WaitCount,
+		"wait_duration":       stats.WaitDuration.String(),
+		"max_idle_closed":     stats.MaxIdleClosed,
 		"max_lifetime_closed": stats.MaxLifetimeClosed,
 	}, nil
 }

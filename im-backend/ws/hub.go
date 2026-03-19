@@ -3,7 +3,6 @@ package ws
 import (
 	"encoding/json"
 	"sync"
-	"time"
 )
 
 // Hub WebSocket Hub

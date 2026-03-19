@@ -230,7 +230,17 @@ func (s *CacheService) ResetRateLimit(ctx context.Context, key string) error {
 
 // MGet 批量获取
 func (s *CacheService) MGet(ctx context.Context, keys []string) ([]string, error) {
-	return s.client.MGet(ctx, keys...).Slice()
+	result, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	values := make([]string, 0, len(result))
+	for _, v := range result {
+		if v != nil {
+			values = append(values, v.(string))
+		}
+	}
+	return values, nil
 }
 
 // MSet 批量设置
@@ -264,14 +274,10 @@ func (s *CacheService) Pipeline() redis.Pipeliner {
 
 // ConfigRedisConnectionPool 配置 Redis 连接池
 func ConfigRedisConnectionPool(client *redis.Client) {
-	poolConfig := &redis.PoolConfig{
-		MaxIdle:         100,         // 最大空闲连接数
-		MaxActive:       1000,        // 最大活跃连接数
-		IdleTimeout:     5 * time.Minute, // 空闲超时
-		MaxConnLifetime: 30 * time.Minute, // 连接最大生命周期
-		Wait:            true,        // 等待可用连接
-	}
-	client.PoolConfig(poolConfig)
+	// redis/v9 使用 Options 配置连接池
+	// MaxIdleConns, MaxIdleConnsPerCPU, MaxOpenConns 等在 redis.Options 中配置
+	// 这里只是一个占位实现，实际配置通过 NewClient 的 Options 传入
+	_ = client // 避免未使用警告
 }
 
 // ============ 性能监控 ============

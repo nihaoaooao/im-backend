@@ -51,7 +51,7 @@ func MaskEmail(email string) string {
 	}
 	username := parts[0]
 	if len(username) <= 2 {
-		return username[0] + "***@" + parts[1]
+		return string(username[0]) + "***@" + parts[1]
 	}
 	return username[:1] + "***" + username[len(username)-1:] + "@" + parts[1]
 }

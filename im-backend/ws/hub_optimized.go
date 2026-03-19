@@ -110,7 +110,7 @@ func (h *OptimizedHub) batchProcess() {
 }
 
 // flushBatch 刷新批量消息
-func (h *OptimizedHub) flushBatch(messages [][]bytes) {
+func (h *OptimizedHub) flushBatch(messages [][]byte) {
 	h.Mutex.RLock()
 	defer h.Mutex.RUnlock()
 
@@ -141,7 +141,6 @@ func (h *OptimizedHub) broadcastToAll(message []byte) {
 	h.Mutex.RLock()
 	defer h.Mutex.RUnlock()
 
-	var wg sync.WaitGroup
 	for _, clients := range h.Clients {
 		for client := range clients {
 			select {
