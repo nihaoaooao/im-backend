@@ -42,7 +42,12 @@ func main() {
 	}
 
 	// 创建路由器
-	router := gin.Default()
+	router := gin.New()
+
+	// 设置最大文件上传大小: 100MB (P0-2: 防止内存耗尽攻击)
+	router.MaxMultipartMemory = 100 << 20 // 100MB
+
+	router.Use(gin.Logger())
 
 	// CORS中间件
 	router.Use(corsMiddleware())

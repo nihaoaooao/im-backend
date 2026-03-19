@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +37,64 @@ var (
 	ErrMediaNotFound        = errors.New("媒体文件不存在")
 	ErrNotMediaOwner        = errors.New("无权操作此文件")
 	ErrInvalidMediaType     = errors.New("无效的媒体类型")
+	ErrInvalidFilename      = errors.New("无效的文件名")
 )
+
+// P2-1: 允许的文件扩展名白名单
+var allowedExtensions = map[models.MediaType][]string{
+	models.MediaTypeImage: {".jpg", ".jpeg", ".png", ".gif", ".webp"},
+	models.MediaTypeVoice: {".mp3", ".m4a", ".wav", ".webm", ".aac"},
+	models.MediaTypeVideo: {".mp4", ".mov", ".avi", ".webm", ".mkv"},
+}
+
+// sanitizeFilename 清理文件名，防止路径遍历攻击 (P2-1)
+func sanitizeFilename(filename string) (string, error) {
+	if filename == "" {
+		return "", ErrInvalidFilename
+	}
+
+	// 1. 移除路径，只保留文件名
+	filename = filepath.Base(filename)
+
+	// 2. 检查路径遍历字符
+	if strings.Contains(filename, "..") {
+		return "", ErrInvalidFilename
+	}
+
+	// 3. 移除特殊字符（只允许字母、数字、下划线、连字符、点）
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_\-\.]`)
+	filename = reg.ReplaceAllString(filename, "")
+
+	// 4. 移除前后空格和控制字符
+	filename = strings.TrimSpace(filename)
+	filename = strings.Trim(filename, "\x00-\x1f")
+
+	// 5. 确保文件名不为空
+	if filename == "" || filename == "." || filename == ".." {
+		return "", ErrInvalidFilename
+	}
+
+	// 6. 检查扩展名是否在白名单中
+	ext := strings.ToLower(filepath.Ext(filename))
+	isAllowed := false
+	for _, allowedExt := range allowedExtensions {
+		for _, e := range allowedExt {
+			if ext == e {
+				isAllowed = true
+				break
+			}
+		}
+		if isAllowed {
+			break
+		}
+	}
+
+	if !isAllowed {
+		return "", ErrInvalidFilename
+	}
+
+	return filename, nil
+}
 
 // MediaUploadService 媒体上传服务
 type MediaUploadService struct {
@@ -102,8 +160,12 @@ func (s *MediaUploadService) Upload(ctx context.Context, req *UploadRequest) (*U
 	}
 	defer file.Close()
 
-	// 4. 生成唯一文件名
-	ext := filepath.Ext(req.File.Filename)
+	// 4. 清理文件名并生成唯一文件名 (P2-1)
+	sanitizedFilename, err := sanitizeFilename(req.File.Filename)
+	if err != nil {
+		return nil, err
+	}
+	ext := strings.ToLower(filepath.Ext(sanitizedFilename))
 	uuid := generateUUID()
 	key := fmt.Sprintf("media/%s/%s%s", req.Type, uuid, ext)
 
@@ -160,9 +222,27 @@ func (s *MediaUploadService) Upload(ctx context.Context, req *UploadRequest) (*U
 	return resp, nil
 }
 
-// validateFileType 验证文件类型
+// validateFileType 验证文件类型 (P0-3: 服务端 MIME 检测 + 扩展名白名单 + 内容验证)
 func (s *MediaUploadService) validateFileType(file *multipart.FileHeader, mediaType models.MediaType) error {
-	// 读取文件头进行 MIME 类型检测
+	// 1. 检查扩展名是否在白名单中 (P2-1)
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowedExts, ok := allowedExtensions[mediaType]
+	if !ok {
+		return ErrInvalidMediaType
+	}
+
+	isExtAllowed := false
+	for _, allowedExt := range allowedExts {
+		if ext == allowedExt {
+			isExtAllowed = true
+			break
+		}
+	}
+	if !isExtAllowed {
+		return ErrInvalidFileType
+	}
+
+	// 2. 读取文件头进行服务端 MIME 类型检测 (P0-3)
 	f, err := file.Open()
 	if err != nil {
 		return ErrInvalidFileType
@@ -177,26 +257,47 @@ func (s *MediaUploadService) validateFileType(file *multipart.FileHeader, mediaT
 	}
 	header = header[:n]
 
-	// 检测 MIME 类型
+	// 检测 MIME 类型 (服务端检测，不使用客户端提供的值)
 	mimeType := http.DetectContentType(header)
 
-	var allowedTypes []string
+	// 3. 验证 MIME 类型
+	var allowedMIMEs []string
 	switch mediaType {
 	case models.MediaTypeImage:
-		allowedTypes = []string{"image/jpeg", "image/png", "image/gif", "image/webp"}
+		allowedMIMEs = []string{"image/jpeg", "image/png", "image/gif", "image/webp"}
 	case models.MediaTypeVoice:
-		allowedTypes = []string{"audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/webm"}
+		allowedMIMEs = []string{"audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/webm"}
 	case models.MediaTypeVideo:
-		allowedTypes = []string{"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
+		allowedMIMEs = []string{"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
 	}
 
-	for _, t := range allowedTypes {
-		if strings.HasPrefix(mimeType, strings.Split(t, "/")[0]+"/") {
-			return nil
+	isMIMEAllowed := false
+	for _, allowedMIME := range allowedMIMEs {
+		if mimeType == allowedMIME {
+			isMIMEAllowed = true
+			break
+		}
+	}
+	if !isMIMEAllowed {
+		return ErrInvalidFileType
+	}
+
+	// 4. 对于图片，验证是否为真实图片 (P0-3: 图片内容验证)
+	if mediaType == models.MediaTypeImage {
+		// 重新打开文件进行解码验证
+		f2, err := file.Open()
+		if err != nil {
+			return ErrInvalidFileType
+		}
+		defer f2.Close()
+
+		_, _, err = image.Decode(f2)
+		if err != nil {
+			return ErrInvalidFileType
 		}
 	}
 
-	return ErrInvalidFileType
+	return nil
 }
 
 // validateFileSize 验证文件大小
