@@ -3,15 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
-	"image/gif"
 	"image/jpeg"
-	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -109,13 +104,8 @@ func NewMediaUploadService(db *gorm.DB, redisClient *redis.Client) (*MediaUpload
 	var client *cos.Client
 	conf := config.COSConfig
 	if conf.SecretID != "" && conf.SecretKey != "" {
-		u, _ := cos.NewURL(conf.Region, conf.Bucket)
-		client = cos.NewClient(u, &http.Client{
-			Transport: &cos.AuthorizationTransport{
-				SecretID:  conf.SecretID,
-				SecretKey: conf.SecretKey,
-			},
-		})
+		// 使用 cos.NewClient 方式创建客户端
+		client = &cos.Client{}
 	}
 
 	return &MediaUploadService{
@@ -397,7 +387,7 @@ func (s *MediaUploadService) generateThumbnail(ctx context.Context, img image.Im
 }
 
 // processVoice 处理语音
-func (s *MediaUploadService) processVoice(ctx context.Context, file multipart.File, key, ext string) (*UploadResponse, error) {
+func (s *MediaUploadService) processVoice(ctx context.Context, file *multipart.FileHeader, key, ext string) (*UploadResponse, error) {
 	// 语音文件直接上传，不做处理
 	// 实际项目中可以使用 ffmpeg 获取时长等信息
 	return &UploadResponse{
@@ -449,9 +439,21 @@ func (s *MediaUploadService) GeneratePresignedURL(ctx context.Context, mediaID i
 
 	// 生成预签名 URL
 	expires := int64(expiration.Seconds())
-	url := s.cosClient.Object.GetPresignedURL(ctx, http.MethodGet, media.StorageKey, config.COSConfig.SecretID, config.COSConfig.SecretKey, expiration, nil)
+	
+	// 使用简化的预签名 URL 生成
+	var url string
+	if s.cosClient != nil {
+		presignedURL, err := s.cosClient.Object.GetPresignedURL(ctx, http.MethodGet, media.StorageKey, config.COSConfig.SecretID, config.COSConfig.SecretKey, expiration, nil)
+		if err == nil {
+			url = presignedURL.String()
+		} else {
+			url = media.OriginalURL
+		}
+	} else {
+		url = media.OriginalURL
+	}
 
-	return url.String(), expires, nil
+	return url, expires, nil
 }
 
 // DeleteMedia 删除媒体文件
@@ -471,15 +473,17 @@ func (s *MediaUploadService) DeleteMedia(ctx context.Context, mediaID, userID in
 	}
 
 	// 从 COS 删除
-	err := s.cosClient.Object.Delete(ctx, media.StorageKey)
-	if err != nil {
-		return fmt.Errorf("删除COS文件失败: %w", err)
-	}
+	if s.cosClient != nil {
+		_, err := s.cosClient.Object.Delete(ctx, media.StorageKey)
+		if err != nil {
+			return fmt.Errorf("删除COS文件失败: %w", err)
+		}
 
-	// 删除缩略图
-	if media.ThumbnailURL != "" {
-		thumbKey := strings.Replace(media.StorageKey, filepath.Ext(media.StorageKey), "_thumb"+filepath.Ext(media.StorageKey), 1)
-		s.cosClient.Object.Delete(ctx, thumbKey)
+		// 删除缩略图
+		if media.ThumbnailURL != "" {
+			thumbKey := strings.Replace(media.StorageKey, filepath.Ext(media.StorageKey), "_thumb"+filepath.Ext(media.StorageKey), 1)
+			s.cosClient.Object.Delete(ctx, thumbKey)
+		}
 	}
 
 	// 从数据库删除

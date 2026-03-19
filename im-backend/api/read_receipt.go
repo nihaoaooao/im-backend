@@ -120,7 +120,7 @@ type ReadUserInfo struct {
 // @Router /api/v1/messages/:id/read-status [get]
 func (h *ReadReceiptHandler) GetMessageReadStatus(c *gin.Context) {
 	// 从上下文获取用户ID
-	userID, exists := c.Get("userID")
+	_, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    401,

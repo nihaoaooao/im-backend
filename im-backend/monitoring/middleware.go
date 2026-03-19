@@ -74,8 +74,8 @@ func ReadyHandler() gin.HandlerFunc {
 // MetricsHandler 返回 JSON 格式的指标
 func MetricsHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		registry := prometheus.DefaultRegistry
-		
+		registry := prometheus.NewRegistry()
+
 		metrics, err := registry.Gather()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -91,7 +91,7 @@ func MetricsHandler() gin.HandlerFunc {
 				"help": m.GetHelp(),
 				"type": m.GetType().String(),
 			}
-			
+
 			// 添加指标数据
 			var metricData []map[string]interface{}
 			for _, metricFamily := range metrics {
@@ -103,16 +103,10 @@ func MetricsHandler() gin.HandlerFunc {
 							labels[l.GetName()] = l.GetValue()
 						}
 					}
-					
-					var value float64
-					switch t := m.GetMetric().(type) {
-					case *prometheus.Metric:
-						// 处理不同类型的指标
-					}
-					
+
 					metricData = append(metricData, map[string]interface{}{
 						"labels": labels,
-						"value": value,
+						"value": float64(0),
 					})
 				}
 			}

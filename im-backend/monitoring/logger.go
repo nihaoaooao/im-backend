@@ -319,19 +319,23 @@ func RequestLogger(method, path, ip, userAgent string, status int, duration time
 
 // WebSocketLogger WebSocket 日志
 func WebSocketLogger(action, userID string, extras map[string]interface{}) {
-	fields := map[string]interface{}{
-		"action": action,
-		"user_id": userID,
+	fields := []interface{}{
+		"action", action,
+		"user_id", userID,
 	}
 	for k, v := range extras {
-		fields[k] = v
+		fields = append(fields, k, v)
 	}
 	Info("WebSocket", fields...)
 }
 
 // BusinessLogger 业务日志
 func BusinessLogger(action string, extras map[string]interface{}) {
-	Info("Business", extras...)
+	fields := []interface{}{"action", action}
+	for k, v := range extras {
+		fields = append(fields, k, v)
+	}
+	Info("Business", fields...)
 }
 
 // ============ 模拟接口实现 ============

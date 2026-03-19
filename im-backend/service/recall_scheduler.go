@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -32,7 +31,7 @@ func NewRecallScheduler(messageService *MessageService, interval time.Duration) 
 // Start 启动定时检查器
 func (r *RecallScheduler) Start() {
 	if r.isRunning {
-		config.Log.Warn("RecallScheduler is already running")
+		config.Log.Printf("Warning: RecallScheduler is already running")
 		return
 	}
 
@@ -44,7 +43,7 @@ func (r *RecallScheduler) Start() {
 		r.run()
 	}()
 
-	config.Log.Info("RecallScheduler started", "interval", r.interval)
+	config.Log.Printf("Info: RecallScheduler started, interval: %v", r.interval)
 }
 
 // Stop 停止定时检查器
@@ -57,7 +56,7 @@ func (r *RecallScheduler) Stop() {
 	r.wg.Wait()
 	r.isRunning = false
 
-	config.Log.Info("RecallScheduler stopped")
+	config.Log.Printf("Info: RecallScheduler stopped")
 }
 
 // run 执行定时检查
@@ -83,22 +82,22 @@ func (r *RecallScheduler) checkAndRevoke() {
 	// 每次处理100条
 	affected, err := r.messageService.RevokeMessageByTimePeriod(100)
 	if err != nil {
-		config.Log.Error("Failed to revoke expired messages", "error", err)
+		config.Log.Printf("Error: Failed to revoke expired messages, error: %v", err)
 		return
 	}
 
 	if affected > 0 {
-		config.Log.Info("Marked messages as non-revocable", "count", affected)
+		config.Log.Printf("Info: Marked messages as non-revocable, count: %d", affected)
 	}
 
 	// 定期输出可撤回消息的统计信息
 	recallableMessages, err := r.messageService.GetRecallableMessages(1000)
 	if err != nil {
-		config.Log.Error("Failed to get recallable messages", "error", err)
+		config.Log.Printf("Error: Failed to get recallable messages, error: %v", err)
 		return
 	}
 
-	config.Log.Debug(fmt.Sprintf("Recallable messages: %d", len(recallableMessages)))
+	config.Log.Printf("Debug: Recallable messages: %d", len(recallableMessages))
 
 	_ = ctx
 }

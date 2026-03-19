@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"im-backend/config"
@@ -89,7 +88,7 @@ func (s *ReadReceiptService) MarkMessagesAsRead(ctx context.Context, userID int6
 			ReadAt:    now,
 		}
 		if err := s.db.Create(&readRecord).Error; err != nil {
-			config.Log.Warn("Failed to create read record", "message_id", msgID, "error", err)
+			config.Log.Printf("Failed to create read record, message_id: %d, error: %v", msgID, err)
 			continue
 		}
 

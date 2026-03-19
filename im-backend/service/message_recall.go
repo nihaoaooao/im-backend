@@ -97,7 +97,7 @@ func (s *MessageService) RecallMessage(senderID int64, msgID string) error {
 	}
 	if err := s.db.Create(&recall).Error; err != nil {
 		// 记录失败不影响撤回主流程
-		config.Log.Warn("Failed to create recall record", "error", err)
+		config.Log.Printf("Failed to create recall record, error: %v", err)
 	}
 
 	// 7. 广播撤回消息给相关用户
@@ -132,7 +132,7 @@ func (s *MessageService) RevokeMessageByTimePeriod(limit int64) (int64, error) {
 
 	result := s.db.Model(&models.Message{}).
 		Where("can_revoke = ? AND created_at < ? AND revoked = ?", true, cutoffTime, false).
-		Limit(limit).
+		Limit(int(limit)).
 		Updates(map[string]interface{}{
 			"can_revoke": false,
 		})
@@ -151,7 +151,7 @@ func (s *MessageService) GetRecallableMessages(limit int64) ([]models.Message, e
 	cutoffTime := time.Now().Add(-s.recallLimit)
 
 	err := s.db.Where("can_revoke = ? AND created_at < ? AND revoked = ?", true, cutoffTime, false).
-		Limit(limit).
+		Limit(int(limit)).
 		Find(&messages).Error
 
 	return messages, err

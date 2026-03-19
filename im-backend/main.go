@@ -86,7 +86,7 @@ func main() {
 
 	// 启动服务器
 	go func() {
-		config.Log.Info("Starting server", "port", config.ServerConfig.Port)
+		config.Log.Printf("Starting server on port %s", config.ServerConfig.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
@@ -97,7 +97,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	config.Log.Info("Shutting down server...")
+	config.Log.Println("Shutting down server...")
 
 	// 优雅关闭
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -106,7 +106,7 @@ func main() {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 
-	config.Log.Info("Server exited")
+	config.Log.Println("Server exited")
 }
 
 func corsMiddleware() gin.HandlerFunc {

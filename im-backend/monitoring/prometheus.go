@@ -239,7 +239,7 @@ func RecordDBQuery(queryType string, duration float64) {
 
 // RecordRedisCommand 记录 Redis 命令
 func RecordRedisCommand(command, status string, duration float64) {
-	RedisCommandsTotal.WithLabelValues(command, status).Observe(duration)
+	RedisCommandsTotal.WithLabelValues(command, status).Inc()
 	RedisCommandDuration.WithLabelValues(command).Observe(duration)
 }
 
