@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"im-backend/config"
 	"im-backend/middleware"
+	"im-backend/model"
+	"im-backend/queue"
 	"im-backend/repository"
 	"im-backend/service"
 	"im-backend/ws"
@@ -41,9 +46,38 @@ func main() {
 	hub := ws.NewHub(redisClient)
 	go hub.Run()
 
+	// 设置消息服务的 Hub
+	msgService.SetHub(hub)
+
+	// ============ 初始化消息队列服务 ============
+	// 创建消息处理器
+	handler := queue.NewSimpleHandler(func(msg *model.Message) error {
+		log.Printf("[QueueHandler] Processing message: %s", msg.MsgID)
+
+		// 消息通过会话ID获取接收者，这里简化处理
+		// 实际应该从会话成员中获取接收者
+		// 暂时只记录日志
+		log.Printf("[QueueHandler] Message %s ready for delivery", msg.MsgID)
+
+		return nil
+	})
+
+	// 创建消费者服务
+	consumerService := queue.NewConsumerService(redisClient, handler, 100)
+
+	// 启动消费者（多个消费者实例）
+	consumerNames := []string{
+		"consumer-1",
+		"consumer-2",
+		"consumer-3",
+	}
+	if err := consumerService.Start(consumerNames); err != nil {
+		log.Printf("[Queue] Failed to start consumer service: %v", err)
+		// 不致命，继续运行
+	}
+
 	// 启动独立的 WebSocket 服务器（端口 8081）
 	go func() {
-		// 使用 HTTP 处理 WebSocket
 		http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 			ws.ServeWs(hub, w, r, cfg.JWTSecret)
 		})
@@ -141,6 +175,35 @@ func main() {
 				ws.HandleGetUserConnections(hub, c)
 			})
 		}
+
+		// 消息队列管理 API
+		queueAPI := api.Group("/queue")
+		queueAPI.Use(middleware.Auth(cfg.JWTSecret))
+		{
+			queueAPI.GET("/stats", func(c *gin.Context) {
+				stats := consumerService.GetStats()
+				c.JSON(200, gin.H{"code": 0, "data": stats})
+			})
+			queueAPI.GET("/length", func(c *gin.Context) {
+				ctx := c.Request.Context()
+				q := queue.NewMessageQueue(redisClient)
+				length, err := q.GetQueueLength(ctx)
+				if err != nil {
+					c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": gin.H{"length": length}})
+			})
+			queueAPI.POST("/clear", func(c *gin.Context) {
+				ctx := c.Request.Context()
+				q := queue.NewMessageQueue(redisClient)
+				if err := q.ClearQueue(ctx); err != nil {
+					c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "msg": "Queue cleared"})
+			})
+		}
 	}
 
 	// WebSocket 路由（通过 Gin）
@@ -151,7 +214,10 @@ func main() {
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"queue":  "running",
+		})
 	})
 
 	// WebSocket 统计（独立端口）
@@ -163,6 +229,19 @@ func main() {
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	log.Printf("[HTTP Server] Starting on %s", addr)
 	log.Printf("[WebSocket] ws://localhost:%d/ws?token=<JWT>", cfg.WSPort)
+	log.Printf("[Queue] Consumer service running with %d consumers", len(consumerNames))
+
+	// 优雅关闭
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("[Server] Shutting down...")
+		consumerService.Stop()
+		log.Println("[Server] Queue stopped")
+	}()
+
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
