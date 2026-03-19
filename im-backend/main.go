@@ -4,6 +4,7 @@ import (
 	"context"
 	"im-backend/api"
 	"im-backend/config"
+	"im-backend/middleware"
 	"im-backend/service"
 	"im-backend/ws"
 	"log"
@@ -45,7 +46,7 @@ func main() {
 	router := gin.New()
 
 	// 设置最大文件上传大小: 100MB (P0-2: 防止内存耗尽攻击)
-	router.MaxMultipartMemory = 100 << 20 // 100MB
+	router.MaxMultipartMemory = config.ServerConfig.MaxMultipartMemory
 
 	router.Use(gin.Logger())
 
@@ -135,18 +136,8 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 func authMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 这里应该实现JWT验证
-		// 简化版本：检查Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization required"})
-			c.Abort()
-			return
-		}
-		// 实际应该解析JWT并验证
-		c.Next()
-	}
+	// 使用JWT认证中间件
+	return middleware.JWTAuthMiddleware()
 }
 
 func handleWebSocket(hub *ws.Hub) gin.HandlerFunc {
@@ -156,5 +147,3 @@ func handleWebSocket(hub *ws.Hub) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "WebSocket endpoint"})
 	}
 }
-
-import "context"

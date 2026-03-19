@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -28,10 +29,46 @@ var DefaultSignatureConfig = &SignatureConfig{
 	AllowedHosts: []string{"localhost", "example.com"},
 }
 
+// ErrSignatureKeyNotConfigured 签名密钥未配置错误
+var ErrSignatureKeyNotConfigured = errors.New("URL签名密钥未配置")
+
+// InitSignatureConfig 初始化签名配置（启动时调用）
+func InitSignatureConfig() error {
+	if DefaultSignatureConfig.SecretKey == "" {
+		// 检查是否为开发环境
+		if os.Getenv("GIN_MODE") == "debug" {
+			fmt.Println("警告: URL_SIGN_SECRET_KEY 未配置，跳过签名验证（开发模式）")
+			return nil
+		}
+		return ErrSignatureKeyNotConfigured
+	}
+
+	// 验证密钥长度（建议至少32字符）
+	if len(DefaultSignatureConfig.SecretKey) < 32 {
+		fmt.Println("警告: URL_SIGN_SECRET_KEY 长度小于32字符，建议使用更长的密钥")
+	}
+
+	return nil
+}
+
+// isProductionMode 检查是否为生产环境
+func isProductionMode() bool {
+	return os.Getenv("GIN_MODE") != "debug" && os.Getenv("GIN_MODE") != ""
+}
+
 // VerifySignatureMiddleware 验证URL签名中间件 (P2-3)
 func VerifySignatureMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 如果没有配置密钥，则跳过验证（开发环境）
+		// 生产环境下必须配置密钥
+		if isProductionMode() && DefaultSignatureConfig.SecretKey == "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":    40306,
+				"message": "URL签名功能未配置，请联系管理员",
+			})
+			return
+		}
+
+		// 如果没有配置密钥，则跳过验证（仅开发环境）
 		if DefaultSignatureConfig.SecretKey == "" {
 			c.Next()
 			return
@@ -94,7 +131,16 @@ func generateSignature(path, expireStr string) string {
 // HotlinkProtectionMiddleware 防盗链中间件 (P2-4)
 func HotlinkProtectionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 如果没有配置允许的域名，则跳过验证（开发环境）
+		// 生产环境下如果没有配置允许的域名，则拒绝所有请求
+		if isProductionMode() && len(DefaultSignatureConfig.AllowedHosts) == 0 {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":    40307,
+				"message": "防盗链配置未配置，请联系管理员",
+			})
+			return
+		}
+
+		// 如果没有配置允许的域名，则跳过验证（仅开发环境）
 		if len(DefaultSignatureConfig.AllowedHosts) == 0 {
 			c.Next()
 			return

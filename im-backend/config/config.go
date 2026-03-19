@@ -20,9 +20,10 @@ var (
 
 // Server 服务器配置
 type Server struct {
-	Port         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	Port              string
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	MaxMultipartMemory int64 // 最大上传文件大小（字节），默认100MB
 }
 
 // COS 腾讯云对象存储配置
@@ -53,9 +54,10 @@ func InitConfig() {
 	writeTimeout := getEnvDuration("SERVER_WRITE_TIMEOUT", 60*time.Second)
 
 	ServerConfig = &Server{
-		Port:         port,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
+		Port:                port,
+		ReadTimeout:         readTimeout,
+		WriteTimeout:        writeTimeout,
+		MaxMultipartMemory: getEnvInt64("MAX_MULTIPART_MEMORY", 100*1024*1024), // 默认100MB
 	}
 
 	// 初始化 COS 配置
