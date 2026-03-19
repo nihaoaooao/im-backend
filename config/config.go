@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 )
@@ -45,11 +47,11 @@ func Load() *Config {
 		// Server - 默认 8080
 		Port: getIntEnv("SERVER_PORT", 8080),
 
-		// Database - 默认 PostgreSQL 配置
+		// Database - 必须从环境变量读取
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getIntEnv("DB_PORT", 5432),
 		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "postgres"),
+		DBPassword: getRequiredEnv("DB_PASSWORD"),
 		DBName:     getEnv("DB_NAME", "im_db"),
 		DBMaxOpen:  getIntEnv("DB_MAX_OPEN", 100),
 		DBMaxIdle:  getIntEnv("DB_MAX_IDLE", 10),
@@ -60,8 +62,8 @@ func Load() *Config {
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		RedisDB:       getIntEnv("REDIS_DB", 0),
 
-		// JWT
-		JWTSecret:  getEnv("JWT_SECRET", "im-backend-secret-key"),
+		// JWT - 必须从环境变量读取
+		JWTSecret:  getRequiredEnv("JWT_SECRET"),
 		JWTExpire:  getIntEnv("JWT_EXPIRE", 168), // 7天
 
 		// OSS (可选)
@@ -82,6 +84,15 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getRequiredEnv 获取必需的环境变量，如果未设置则退出程序
+func getRequiredEnv(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatal(fmt.Sprintf("[CRITICAL] Required environment variable '%s' is not set. Please set it before starting the server.", key))
+	}
+	return value
 }
 
 func getIntEnv(key string, defaultValue int) int {
