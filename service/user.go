@@ -166,7 +166,7 @@ func isValidPhone(phone string) bool {
 	return true
 }
 
-// Login 用户登录
+// Login 用户登录 - [P2] 添加登录失败限制
 func (s *UserService) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
@@ -192,10 +192,35 @@ func (s *UserService) Login(c *gin.Context) {
 		return
 	}
 
+	// [P2] 检查登录失败次数（使用Redis记录）
+	loginFailKey := fmt.Sprintf("login:fail:%d", user.ID)
+	if s.redis != nil {
+		failCount, _ := s.redis.Get(context.Background(), loginFailKey).Int()
+		if failCount >= 5 {
+			// 获取锁定剩余时间
+			ttl, _ := s.redis.TTL(context.Background(), loginFailKey).Result()
+			c.JSON(429, gin.H{
+				"code": 429,
+				"msg":  fmt.Sprintf("登录尝试过多，请 %.0f 分钟后再试", ttl.Minutes()),
+			})
+			return
+		}
+	}
+
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		// [P2] 记录登录失败
+		if s.redis != nil {
+			s.redis.Incr(context.Background(), loginFailKey)
+			s.redis.Expire(context.Background(), loginFailKey, 15*time.Minute) // 15分钟内有效
+		}
 		c.JSON(401, gin.H{"code": 401, "msg": "用户名或密码错误"})
 		return
+	}
+
+	// [P2] 登录成功后清除失败记录
+	if s.redis != nil {
+		s.redis.Del(context.Background(), loginFailKey)
 	}
 
 	// 生成 JWT token

@@ -176,7 +176,7 @@ func (s *MessageService) CreateConversation(c *gin.Context) {
 	c.JSON(400, gin.H{"code": 400, "msg": "请使用群组接口创建群聊"})
 }
 
-// SendMessage 发送消息
+// SendMessage 发送消息 - [P2] 添加消息内容长度限制
 func (s *MessageService) SendMessage(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	username, _ := c.Get("username")
@@ -186,6 +186,13 @@ func (s *MessageService) SendMessage(c *gin.Context) {
 		Content        string `json:"content" binding:"required"`
 		ContentType    string `json:"contentType"`
 		Extra          string `json:"extra"` // 扩展信息 JSON 字符串
+	}
+
+	// [P2] 消息内容长度限制
+	const MaxMessageLength = 5000 // 最大5000字符
+	if len(req.Content) > MaxMessageLength {
+		c.JSON(400, gin.H{"code": 400, "msg": fmt.Sprintf("消息内容过长，最大支持 %d 字符", MaxMessageLength)})
+		return
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -299,13 +306,25 @@ func (s *MessageService) SendMessage(c *gin.Context) {
 	})
 }
 
-// GetHistory 获取历史消息
+// GetHistory 获取历史消息 - [P2] 添加分页上限
 func (s *MessageService) GetHistory(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 
 	conversationID, _ := strconv.ParseInt(c.Query("conversationId"), 10, 64)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	// [P2] 分页上限限制
+	const MaxLimit = 100 // 最大每次获取100条
+	if limit > MaxLimit {
+		limit = MaxLimit
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	// 检查用户是否有权限访问该会话
 	var member model.ConversationMember

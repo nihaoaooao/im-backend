@@ -61,6 +61,10 @@ func Auth(secret string) gin.HandlerFunc {
 
 		// 解析 JWT token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// [M004] JWT算法验证：只允许HMAC算法
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
 			return []byte(secret), nil
 		})
 
@@ -92,13 +96,40 @@ func Auth(secret string) gin.HandlerFunc {
 	}
 }
 
-// CORS 跨域中间件
+// CORS 跨域中间件 - [P2] 修复：限制允许的域名
 func Cors() gin.HandlerFunc {
+	// 允许的域名列表（生产环境应该配置化）
+	allowedOrigins := map[string]bool{
+		"http://localhost":     true,
+		"http://localhost:8080": true,
+		"http://localhost:3000": true,
+		"http://127.0.0.1":     true,
+		"http://127.0.0.1:8080": true,
+		"http://127.0.0.1:3000": true,
+	}
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+
+		// 检查Origin是否在允许列表中
+		if origin != "" && allowedOrigins[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+		} else if origin == "" {
+			// 同源请求，不设置Allow-Origin
+		} else {
+			// 不允许的Origin，拒绝请求
+			c.JSON(http.StatusForbidden, gin.H{
+				"code": 403,
+				"msg":  "不允许的跨域请求",
+			})
+			c.Abort()
+			return
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Header("Access-Control-Max-Age", "86400")
+		c.Header("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

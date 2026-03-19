@@ -85,12 +85,29 @@ type Message struct {
 
 // ============ WebSocket 升级器 ============
 
-// upgrader WebSocket 升级器
+// upgrader WebSocket 升级器 - [M003] 修复：安全的Origin检查
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // 生产环境应检查 Origin
+		// 允许的Origin列表
+		allowedOrigins := map[string]bool{
+			"http://localhost":     true,
+			"http://localhost:8080": true,
+			"http://localhost:3000": true,
+			"http://127.0.0.1":     true,
+			"http://127.0.0.1:8080": true,
+			"http://127.0.0.1:3000": true,
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// 同源请求，允许
+			return true
+		}
+
+		// 检查Origin是否在允许列表中
+		return allowedOrigins[origin]
 	},
 }
 
