@@ -45,10 +45,17 @@ var DefaultJWTConfig = &JWTConfig{
 type Claims struct {
 	UserID   int64  `json:"user_id"`
 	Username string `json:"username"`
+	Role     string `json:"role"` // 用户角色: admin, user
 	Issuer   string `json:"iss"`
 	IssuedAt int64  `json:"iat"`
 	ExpireAt int64  `json:"exp"`
 }
+
+// 角色常量
+const (
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+)
 
 // JWTAuthMiddleware JWT认证中间件
 func JWTAuthMiddleware() gin.HandlerFunc {
@@ -100,13 +107,14 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		// 将用户信息存入context
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("role", claims.Role)
 
 		c.Next()
 	}
 }
 
 // GenerateToken 生成JWT token
-func GenerateToken(userID int64, username string) (string, error) {
+func GenerateToken(userID int64, username string, role string) (string, error) {
 	if DefaultJWTConfig.SecretKey == "" {
 		return "", errors.New("JWT密钥未配置")
 	}
@@ -114,9 +122,15 @@ func GenerateToken(userID int64, username string) (string, error) {
 	now := time.Now().Unix()
 	expiry := now + int64(DefaultJWTConfig.ExpiryTime.Seconds())
 
+	// 默认角色为 user
+	if role == "" {
+		role = RoleUser
+	}
+
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
+		Role:     role,
 		Issuer:   DefaultJWTConfig.Issuer,
 		IssuedAt: now,
 		ExpireAt: expiry,
@@ -250,8 +264,8 @@ func RefreshToken(token string) (string, error) {
 		return "", err
 	}
 
-	// 生成新token
-	return GenerateToken(claims.UserID, claims.Username)
+	// 生成新token，保留原角色
+	return GenerateToken(claims.UserID, claims.Username, claims.Role)
 }
 
 // InitJWTConfig 初始化JWT配置（启动时调用）
@@ -269,4 +283,47 @@ func InitJWTConfig() error {
 	}
 
 	return nil
+}
+
+// ========== PT-002: 权限验证中间件 ==========
+
+// RequireRole 角色权限验证中间件
+func RequireRole(allowedRoles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":    40301,
+				"message": "用户角色信息不存在",
+			})
+			return
+		}
+
+		userRole := role.(string)
+		for _, r := range allowedRoles {
+			if userRole == r {
+				c.Next()
+				return
+			}
+		}
+
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"code":    40302,
+			"message": "权限不足，需要角色: " + strings.Join(allowedRoles, " 或 "),
+		})
+	}
+}
+
+// RequireAdmin 管理员权限中间件
+func RequireAdmin() gin.HandlerFunc {
+	return RequireRole(RoleAdmin)
+}
+
+// GetRole 从context获取用户角色
+func GetRole(c *gin.Context) string {
+	role, exists := c.Get("role")
+	if !exists {
+		return ""
+	}
+	return role.(string)
 }

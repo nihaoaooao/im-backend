@@ -92,7 +92,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// 为每个用户生成唯一的 JWT Token
-	token, err := middleware.GenerateToken(int64(user.ID), user.Username)
+	token, err := middleware.GenerateToken(int64(user.ID), user.Username, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    50002,
@@ -213,9 +213,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	username, _ := c.Get("username")
+	role, _ := c.Get("role")
 
 	// 生成新 Token
-	token, err := middleware.GenerateToken(userID.(int64), username.(string))
+	token, err := middleware.GenerateToken(userID.(int64), username.(string), role.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    50001,

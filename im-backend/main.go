@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,11 +82,12 @@ func main() {
 	// API路由
 	apiGroup := router.Group("/api/v1")
 	{
-		// 认证路由（不需要认证）
+		// 认证路由（不需要认证，但有速率限制）
+		// PT-005: 登录每分钟 5 次，注册每分钟 3 次
 		authGroup := apiGroup.Group("/auth")
 		{
-			authGroup.POST("/login", authHandler.Login)
-			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", middleware.RateLimitMiddleware(5, time.Minute), authHandler.Login)
+			authGroup.POST("/register", middleware.RateLimitMiddleware(3, time.Minute), authHandler.Register)
 		}
 
 		// 需要认证的路由
@@ -148,21 +150,51 @@ func main() {
 }
 
 func corsMiddleware() gin.HandlerFunc {
+	// PT-004: 从环境变量获取允许的域名列表
+	allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+	var allowedOrigins []string
+	if allowedOriginsEnv != "" {
+		allowedOrigins = strings.Split(allowedOriginsEnv, ",")
+	} else {
+		// 默认允许的域名（开发环境）
+		allowedOrigins = []string{
+			"http://localhost:3000",
+			"http://localhost:8080",
+			"http://localhost:5173",
+		}
+	}
+
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		// 这里应该配置允许的域名列表
-		allowedOrigins := []string{"http://localhost:3000", "http://localhost:8080"}
-		
-		for _, allowed := range allowedOrigins {
-			if origin == allowed {
-				c.Header("Access-Control-Allow-Origin", origin)
+
+		// 检查 Origin 是否在白名单中
+		isAllowed := false
+		for _, allowedOrigin := range allowedOrigins {
+			if origin == allowedOrigin {
+				isAllowed = true
 				break
 			}
 		}
 
+		// 如果不在白名单中，拒绝请求
+		if !isAllowed && origin != "" {
+			c.Header("Access-Control-Allow-Origin", "")
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":    40301,
+				"message": "CORS: Origin not allowed",
+			})
+			return
+		}
+
+		// 只对白名单内的域名返回允许的 Origin
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
 		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("Access-Control-Max-Age", "86400") // 24小时
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
