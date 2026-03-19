@@ -7,8 +7,8 @@ on:
     branches: [main, develop]
 
 env:
+  GO_VERSION: '1.21'
   NODE_VERSION: '18'
-  GO_VERSION: '1.20'
 
 jobs:
   # ========== 代码质量检查 ==========
@@ -18,26 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 后端代码检查
-      - name: Backend Lint (Go)
+      # 后端代码检查 (Go + Gin)
+      - name: Setup Go
+        if: hashFiles('**/go.mod')
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Go Lint (golangci-lint)
         if: hashFiles('**/go.mod')
         run: |
           cd backend
-          go vet ./...
-          # 可以添加 golangci-lint
+          golangci-lint run ./... || go vet ./...
 
-      - name: Backend Lint (Node.js)
-        if: hashFiles('**/package.json')
+      - name: Go FMT Check
+        if: hashFiles('**/go.mod')
         run: |
           cd backend
-          npm ci
-          npm run lint || true
-
-      - name: Backend Lint (Java)
-        if: hashFiles('**/pom.xml')
-        run: |
-          cd backend
-          mvn checkstyle:check
+          gofmt -l . | grep -q . && echo "Found unformatted files" && exit 1 || true
 
       # 移动端代码检查
       - name: Mobile Lint (Android)
@@ -60,41 +59,66 @@ jobs:
           npm ci
           npm run lint
 
-  # ========== 后端测试 ==========
+  # ========== 后端测试 (Go + Gin) ==========
   backend-test:
-    name: 后端单元测试
+    name: 后端测试
     runs-on: ubuntu-latest
+    if: hashFiles('**/go.mod')
+    services:
+      # PostgreSQL 数据库服务
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # Redis 缓存服务
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Go
-        if: hashFiles('**/go.mod')
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Setup Node.js
-        if: hashFiles('**/package.json')
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+      - name: Download dependencies
+        run: |
+          cd backend
+          go mod download
 
-      - name: Go Tests
-        if: hashFiles('**/go.mod')
+      - name: Run Unit Tests
         run: |
           cd backend
           go test -v -race -coverprofile=coverage.out ./...
 
-      - name: Node.js Tests
-        if: hashFiles('**/package.json')
+      - name: Run Integration Tests
+        env:
+          DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable
+          REDIS_URL: redis://localhost:6379
         run: |
           cd backend
-          npm ci
-          npm test -- --coverage
+          go test -v -tags=integration ./...
 
       - name: Upload coverage
-        if: hashFiles('**/coverage.out') || hashFiles('**/coverage')
         uses: codecov/codecov-action@v3
         with:
           files: ./backend/coverage.out
@@ -151,11 +175,32 @@ jobs:
           directory: ./frontend/coverage
           fail_ci_if_error: false
 
+  # ========== 安全扫描 ==========
+  security:
+    name: 安全扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go 安全扫描
+      - name: Go Vulnerability Scan
+        if: hashFiles('**/go.mod')
+        uses: golang/vuln-action@v1
+        with:
+          modules: github.com/your-module/backend
+
+      - name: Go Sec Scan
+        if: hashFiles('**/go.mod')
+        run: |
+          cd backend
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt sonarqube -out gosec-report.json ./... || true
+
   # ========== 构建检查 ==========
   build:
     name: 构建检查
     runs-on: ubuntu-latest
-    needs: [lint, backend-test, mobile-test, frontend-test]
+    needs: [lint, backend-test, mobile-test, frontend-test, security]
     steps:
       - uses: actions/checkout@v4
 
@@ -164,25 +209,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Setup Node.js
-        if: hashFiles('**/package.json')
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Build Backend (Go)
+      - name: Build Backend (Go + Gin)
         if: hashFiles('**/go.mod')
         run: |
           cd backend
-          go build -o app .
-
-      - name: Build Backend (Node.js)
-        if: hashFiles('**/package.json')
-        run: |
-          cd backend
-          npm run build
+          go build -o bin/server .
 
       - name: Build Android
         if: hashFiles('**/build.gradle')
@@ -195,3 +228,10 @@ jobs:
         run: |
           cd frontend
           npm run build
+
+      - name: Upload Build Artifacts
+        if: hashFiles('**/go.mod')
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-binary
+          path: backend/bin/server
