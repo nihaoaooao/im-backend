@@ -18,20 +18,20 @@ var (
 
 // UserService 用户服务
 type UserService struct {
-	db *gorm.DB
+	DB *gorm.DB
 }
 
 // NewUserService 创建用户服务
 func NewUserService(db *gorm.DB) *UserService {
 	return &UserService{
-		db: db,
+		DB: db,
 	}
 }
 
 // GetUserByID 根据ID获取用户
 func (s *UserService) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
 	var user models.User
-	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+	if err := s.DB.WithContext(ctx).First(&user, userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
@@ -43,7 +43,7 @@ func (s *UserService) GetUserByID(ctx context.Context, userID int64) (*models.Us
 // GetUserByUsername 根据用户名获取用户
 func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
-	if err := s.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
@@ -81,11 +81,11 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 	}
 	user.PasswordHash = string(hashedPassword)
 
-	return s.db.WithContext(ctx).Create(user).Error
+	return s.DB.WithContext(ctx).Create(user).Error
 }
 
 // UpdateLastLogin 更新最后登录时间
 func (s *UserService) UpdateLastLogin(ctx context.Context, userID int64) error {
 	now := time.Now()
-	return s.db.Model(&models.User{}).Where("id = ?", userID).Update("last_login_at", now).Error
+	return s.DB.Model(&models.User{}).Where("id = ?", userID).Update("last_login_at", now).Error
 }

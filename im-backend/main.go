@@ -57,6 +57,9 @@ func main() {
 	// 创建撤回处理器
 	recallHandler := api.NewMessageRecallHandler(messageService)
 
+	// 创建用户处理器
+	userHandler := api.NewUserHandler(userService)
+
 	// 创建撤回定时检查器（每分钟检查一次）
 	scheduler := service.NewRecallScheduler(messageService, 1*time.Minute)
 	scheduler.Start()
@@ -102,6 +105,15 @@ func main() {
 			// 消息撤回路由
 			protectedGroup.POST("/messages/recall", recallHandler.RecallMessage)
 			protectedGroup.GET("/messages/recallable", recallHandler.GetRecallableMessages)
+
+			// PT-002: 管理员路由 - 需要 admin 角色
+			adminGroup := protectedGroup.Group("/admin")
+			adminGroup.Use(middleware.RequireAdmin())
+			{
+				adminGroup.GET("/users", userHandler.ListUsers)
+				adminGroup.GET("/users/:id", userHandler.GetUser)
+				adminGroup.DELETE("/users/:id", userHandler.DeleteUser)
+			}
 		}
 
 		// WebSocket路由
