@@ -5,6 +5,7 @@ import (
 	"im-backend/api"
 	"im-backend/config"
 	"im-backend/middleware"
+	"im-backend/models"
 	"im-backend/service"
 	"im-backend/ws"
 	"log"
@@ -21,12 +22,36 @@ func main() {
 	// 初始化配置
 	config.InitConfig()
 
+	// 初始化数据库
+	db, err := config.InitDatabase(nil)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// 自动迁移数据库表
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Message{},
+		&models.MessageRecall{},
+		&models.MessageRead{},
+		&models.ConversationUnreadCount{},
+		&models.UserMediaQuota{},
+	); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
 	// 创建Hub
 	hub := ws.NewHub()
 	go hub.Run()
 
+	// 创建用户服务
+	userService := service.NewUserService(db)
+
 	// 创建消息服务
 	messageService := service.NewMessageService(nil, hub, nil)
+
+	// 创建认证处理器
+	authHandler := api.NewAuthHandler(userService)
 
 	// 创建撤回处理器
 	recallHandler := api.NewMessageRecallHandler(messageService)
@@ -56,12 +81,25 @@ func main() {
 	// API路由
 	apiGroup := router.Group("/api/v1")
 	{
-		// 消息撤回路由（需要认证）
-		messagesGroup := apiGroup.Group("/messages")
-		messagesGroup.Use(authMiddleware())
+		// 认证路由（不需要认证）
+		authGroup := apiGroup.Group("/auth")
 		{
-			messagesGroup.POST("/recall", recallHandler.RecallMessage)
-			messagesGroup.GET("/recallable", recallHandler.GetRecallableMessages)
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/register", authHandler.Register)
+		}
+
+		// 需要认证的路由
+		protectedGroup := apiGroup.Group("")
+		protectedGroup.Use(authMiddleware())
+		{
+			// 认证相关
+			protectedGroup.POST("/auth/logout", authHandler.Logout)
+			protectedGroup.POST("/auth/refresh", authHandler.RefreshToken)
+			protectedGroup.GET("/auth/me", authHandler.GetCurrentUser)
+
+			// 消息撤回路由
+			protectedGroup.POST("/messages/recall", recallHandler.RecallMessage)
+			protectedGroup.GET("/messages/recallable", recallHandler.GetRecallableMessages)
 		}
 
 		// WebSocket路由
