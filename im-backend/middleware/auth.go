@@ -16,10 +16,14 @@ import (
 )
 
 var (
-	ErrInvalidToken = errors.New("无效的token")
-	ErrTokenExpired = errors.New("token已过期")
-	ErrSignature    = errors.New("签名验证失败")
+	ErrInvalidToken   = errors.New("无效的token")
+	ErrTokenExpired   = errors.New("token已过期")
+	ErrSignature      = errors.New("签名验证失败")
+	ErrInvalidAlgorithm = errors.New("无效的算法")
 )
+
+// AllowedAlgorithm 强制允许的算法
+const AllowedAlgorithm = "HS256"
 
 // JWTConfig JWT配置
 type JWTConfig struct {
@@ -157,6 +161,32 @@ func ValidateToken(token string) (*Claims, error) {
 	headerEncoded := parts[0]
 	claimsEncoded := parts[1]
 	signature := parts[2]
+
+	// ========== PT-001: 算法验证（必须首先执行）==========
+	// 解码 header，验证算法
+	headerJSON, err := base64.URLEncoding.DecodeString(headerEncoded)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	var header struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+	}
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	// 拒绝 "none" 算法（这是最常见的安全攻击）
+	if strings.ToLower(header.Alg) == "none" {
+		return nil, ErrInvalidAlgorithm
+	}
+
+	// 强制要求 HS256 算法
+	if header.Alg != AllowedAlgorithm {
+		return nil, ErrInvalidAlgorithm
+	}
+	// ========== 算法验证结束 ==========
 
 	// 验证签名
 	expectedSignature := generateHMACSignature(headerEncoded + "." + claimsEncoded)
