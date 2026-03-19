@@ -131,6 +131,8 @@ func main() {
 		{
 			conv.GET("", msgService.GetConversations)
 			conv.POST("", msgService.CreateConversation)
+			conv.GET("/:id", msgService.GetConversationDetail)
+			conv.GET("/unread", msgService.GetUnreadCount)
 		}
 
 		// 消息路由
