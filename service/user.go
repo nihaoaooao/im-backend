@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"im-backend/model"
+	"im-backend/ws"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -20,7 +21,13 @@ type UserService struct {
 	db         *gorm.DB
 	redis      *redis.Client
 	jwtSecret  string
-	jwtExpire  int // 小时
+	jwtExpire  int  // 小时
+	hub        *ws.Hub
+}
+
+// SetHub 设置 WebSocket Hub
+func (s *UserService) SetHub(hub *ws.Hub) {
+	s.hub = hub
 }
 
 // NewUserService 创建用户服务
@@ -435,33 +442,176 @@ func (s *UserService) AddFriend(c *gin.Context) {
 		return
 	}
 
-	// 创建好友关系
+	// 不能添加自己为好友
+	if userID.(int64) == req.FriendID {
+		c.JSON(400, gin.H{"code": 400, "msg": "不能添加自己为好友"})
+		return
+	}
+
+	// 检查目标用户是否存在
+	var targetUser model.User
+	if err := s.db.First(&targetUser, req.FriendID).Error; err != nil {
+		c.JSON(404, gin.H{"code": 404, "msg": "用户不存在"})
+		return
+	}
+
+	// 检查是否已经是好友关系
+	var existFriend model.Friendship
+	if err := s.db.Where("(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
+		userID.(int64), req.FriendID, req.FriendID, userID.(int64)).First(&existFriend).Error; err == nil {
+		if existFriend.Status == "accepted" {
+			c.JSON(400, gin.H{"code": 400, "msg": "已经是好友了"})
+			return
+		}
+		if existFriend.Status == "pending" {
+			c.JSON(400, gin.H{"code": 400, "msg": "已经发送过好友请求了"})
+			return
+		}
+	}
+
+	// [P2] 好友添加验证：创建待审核的好友请求
 	friendship := model.Friendship{
 		UserID:    userID.(int64),
 		FriendID:  req.FriendID,
 		Remark:    req.Remark,
-		Status:    "accepted", // 直接通过，可改为 pending 审核
+		Status:    "pending", // 待对方确认
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
 	if err := s.db.Create(&friendship).Error; err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "添加好友失败"})
+		c.JSON(500, gin.H{"code": 500, "msg": "发送好友请求失败"})
 		return
 	}
 
-	// 双向好友关系
-	friendship2 := model.Friendship{
-		UserID:    req.FriendID,
-		FriendID:  userID.(int64),
-		Remark:    "",
-		Status:    "accepted",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	// 通过 WebSocket 通知对方
+	if s.hub != nil {
+		s.hub.SendToUser(req.FriendID, gin.H{
+			"type": "friend_request",
+			"data": gin.H{
+				"from_user_id": userID.(int64),
+				"remark":       req.Remark,
+			},
+		})
 	}
-	s.db.Create(&friendship2)
 
-	c.JSON(200, gin.H{"code": 0, "msg": "添加成功"})
+	c.JSON(200, gin.H{
+		"code": 0,
+		"msg":  "好友请求已发送，等待对方确认",
+		"data": gin.H{
+			"status": "pending",
+		},
+	})
+}
+
+// RespondFriendRequest 响应好友请求
+func (s *UserService) RespondFriendRequest(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+
+	var req struct {
+		FriendID int64  `json:"friend_id" binding:"required"`
+		Accept   bool   `json:"accept" binding:"required"` // true=接受，false=拒绝
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "参数错误"})
+		return
+	}
+
+	// 查找待处理的好友请求
+	var friendship model.Friendship
+	if err := s.db.Where("user_id = ? AND friend_id = ? AND status = ?",
+		req.FriendID, userID.(int64), "pending").First(&friendship).Error; err != nil {
+		c.JSON(404, gin.H{"code": 404, "msg": "好友请求不存在"})
+		return
+	}
+
+	// 更新请求状态
+	if req.Accept {
+		friendship.Status = "accepted"
+		friendship.UpdatedAt = time.Now()
+		s.db.Save(&friendship)
+
+		// 创建双向好友关系
+		friendship2 := model.Friendship{
+			UserID:    userID.(int64),
+			FriendID:  req.FriendID,
+			Remark:    "",
+			Status:    "accepted",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		s.db.Create(&friendship2)
+
+		// 通知对方
+		if s.hub != nil {
+			s.hub.SendToUser(req.FriendID, gin.H{
+				"type": "friend_accepted",
+				"data": gin.H{
+					"from_user_id": userID.(int64),
+				},
+			})
+		}
+
+		c.JSON(200, gin.H{"code": 0, "msg": "已接受好友请求"})
+	} else {
+		friendship.Status = "rejected"
+		friendship.UpdatedAt = time.Now()
+		s.db.Save(&friendship)
+
+		c.JSON(200, gin.H{"code": 0, "msg": "已拒绝好友请求"})
+	}
+}
+
+// GetFriendRequests 获取好友请求列表
+func (s *UserService) GetFriendRequests(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	requestType := c.DefaultQuery("type", "received") // received=收到的请求，sent=发送的请求
+
+	var friendships []model.Friendship
+
+	if requestType == "received" {
+		// 收到的请求
+		s.db.Where("friend_id = ? AND status = ?", userID, "pending").Find(&friendships)
+	} else {
+		// 发送的请求
+		s.db.Where("user_id = ? AND status = ?", userID, "pending").Find(&friendships)
+	}
+
+	// 填充用户信息
+	type Result struct {
+		ID        int64             `json:"id"`
+		FromUserID int64            `json:"from_user_id"`
+		ToUserID  int64            `json:"to_user_id"`
+		Remark    string            `json:"remark"`
+		Status    string            `json:"status"`
+		CreatedAt time.Time         `json:"created_at"`
+		User     *model.User       `json:"user,omitempty"`
+	}
+
+	results := make([]Result, 0)
+	for _, f := range friendships {
+		var user model.User
+		var userIDQuery int64
+		if requestType == "received" {
+			userIDQuery = f.UserID
+		} else {
+			userIDQuery = f.FriendID
+		}
+		s.db.First(&user, userIDQuery)
+
+		results = append(results, Result{
+			ID:         f.ID,
+			FromUserID: f.UserID,
+			ToUserID:  f.FriendID,
+			Remark:    f.Remark,
+			Status:    f.Status,
+			CreatedAt: f.CreatedAt,
+			User:      &user,
+		})
+	}
+
+	c.JSON(200, gin.H{"code": 0, "data": results})
 }
 
 // generateToken 生成 JWT Token

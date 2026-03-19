@@ -49,6 +49,9 @@ func main() {
 	// 设置消息服务的 Hub
 	msgService.SetHub(hub)
 
+	// 设置用户服务的 Hub
+	userService.SetHub(hub)
+
 	// ============ 初始化消息队列服务 ============
 	// 创建消息处理器
 	handler := queue.NewSimpleHandler(func(msg *model.Message) error {
@@ -123,6 +126,8 @@ func main() {
 			user.PUT("/profile", userService.UpdateProfile)
 			user.GET("/friends", userService.GetFriends)
 			user.POST("/friend", userService.AddFriend)
+			user.POST("/friend/respond", userService.RespondFriendRequest)
+			user.GET("/friend/requests", userService.GetFriendRequests)
 		}
 
 		// 会话路由
