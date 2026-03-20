@@ -1,0 +1,315 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "高并发即时通讯系统后端 API 文档",
+    "title": "IM Backend API",
+    "termsOfService": "http://swagger.io/terms/",
+    "contact": {
+      "name": "API Support",
+      "url": "http://www.example.com/support",
+      "email": "support@example.com"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    },
+    "version": "1.0"
+  },
+  "host": "localhost:8080",
+  "basePath": "/",
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "description": "创建新用户账号",
+        "summary": "用户注册",
+        "tags": ["认证"],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "request",
+            "description": "注册请求",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.RegisterRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "用户登录获取 Token",
+        "summary": "用户登录",
+        "tags": ["认证"],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "request",
+            "description": "登录请求",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.LoginRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/user/profile": {
+      "get": {
+        "description": "获取当前登录用户资料",
+        "summary": "获取用户资料",
+        "tags": ["用户"],
+        "produces": ["application/json"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      },
+      "put": {
+        "description": "更新当前登录用户资料",
+        "summary": "更新用户资料",
+        "tags": ["用户"],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "request",
+            "description": "更新资料请求",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.UpdateProfileRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/messages/send": {
+      "post": {
+        "description": "向指定会话发送消息",
+        "summary": "发送消息",
+        "tags": ["消息"],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "request",
+            "description": "发送消息请求",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.SendMessageRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/messages/history": {
+      "get": {
+        "description": "获取指定会话的历史消息",
+        "summary": "获取历史消息",
+        "tags": ["消息"],
+        "produces": ["application/json"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "conversationId",
+            "description": "会话ID",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "数量限制",
+            "type": "integer"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "description": "偏移量",
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/api.Response"
+            }
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "description": "WebSocket 连接",
+        "summary": "WebSocket",
+        "tags": ["WebSocket"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "description": "JWT Token",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "api.RegisterRequest": {
+      "type": "object",
+      "required": ["username", "password"],
+      "properties": {
+        "username": {
+          "type": "string",
+          "example": "john_doe"
+        },
+        "password": {
+          "type": "string",
+          "example": "password123"
+        },
+        "email": {
+          "type": "string",
+          "example": "john@example.com"
+        },
+        "nickname": {
+          "type": "string",
+          "example": "John Doe"
+        }
+      }
+    },
+    "api.LoginRequest": {
+      "type": "object",
+      "required": ["username", "password"],
+      "properties": {
+        "username": {
+          "type": "string",
+          "example": "john_doe"
+        },
+        "password": {
+          "type": "string",
+          "example": "password123"
+        }
+      }
+    },
+    "api.UpdateProfileRequest": {
+      "type": "object",
+      "properties": {
+        "nickname": {
+          "type": "string",
+          "example": "John Doe"
+        },
+        "avatar": {
+          "type": "string",
+          "example": "https://example.com/avatar.jpg"
+        },
+        "email": {
+          "type": "string",
+          "example": "john@example.com"
+        },
+        "phone": {
+          "type": "string",
+          "example": "+86-13800138000"
+        },
+        "gender": {
+          "type": "string",
+          "example": "male"
+        }
+      }
+    },
+    "api.SendMessageRequest": {
+      "type": "object",
+      "required": ["conversationId", "content"],
+      "properties": {
+        "conversationId": {
+          "type": "integer",
+          "example": 1
+        },
+        "content": {
+          "type": "string",
+          "example": "Hello"
+        },
+        "contentType": {
+          "type": "string",
+          "example": "text"
+        }
+      }
+    },
+    "api.Response": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "example": 0
+        },
+        "msg": {
+          "type": "string",
+          "example": "success"
+        },
+        "data": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Type \"Bearer\" followed by a space and JWT token."
+    }
+  }
+}

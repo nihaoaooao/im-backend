@@ -1,0 +1,80 @@
+# =====================================================
+# 壹信 IM Docker Compose 编排文件
+# =====================================================
+# 使用方法: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # ------------------- IM Backend -------------------
+  im-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: im-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"  # HTTP API
+      - "8081:8081"  # WebSocket
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - im-network
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ------------------- PostgreSQL (可选) -------------------
+  # 如果你已有外部 PostgreSQL，可以注释掉整个 postgres 服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: im-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: im_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - im-network
+
+  # ------------------- Redis (可选) -------------------
+  # 如果你已有外部 Redis，可以注释掉整个 redis 服务
+  redis:
+    image: redis:7-alpine
+    container_name: im-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - im-network
+
+# ------------------- 网络配置 -------------------
+networks:
+  im-network:
+    driver: bridge
+
+# ------------------- 持久化存储 -------------------
+volumes:
+  postgres_data:
+  redis_data:
