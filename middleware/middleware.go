@@ -152,12 +152,14 @@ func RequireAdmin() gin.HandlerFunc {
 func Cors() gin.HandlerFunc {
 	// 允许的域名列表（生产环境应该配置化）
 	allowedOrigins := map[string]bool{
-		"http://localhost":     true,
-		"http://localhost:8080": true,
-		"http://localhost:3000": true,
-		"http://127.0.0.1":     true,
+		"http://localhost":       true,
+		"http://localhost:8080":  true,
+		"http://localhost:3000":  true,
+		"http://127.0.0.1":      true,
 		"http://127.0.0.1:8080": true,
 		"http://127.0.0.1:3000": true,
+		"http://129.226.74.230": true,
+		"https://tsgj.me":       true,
 	}
 
 	return func(c *gin.Context) {
