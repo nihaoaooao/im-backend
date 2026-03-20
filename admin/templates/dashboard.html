@@ -90,12 +90,12 @@
             </thead>
             <tbody>
                 {% if .Logs %}
-                {% for log := range .Logs %}
+                {% for item := range .Logs %}
                 <tr class="border-b">
-                    <td class="px-4 py-2">{{ formatTime log.CreatedAt }}</td>
-                    <td class="px-4 py-2">{{ log.AdminUsername }}</td>
-                    <td class="px-4 py-2">{{ log.Action }}</td>
-                    <td class="px-4 py-2">{{ log.Details }}</td>
+                    <td class="px-4 py-2">{{ formatTime item.CreatedAt }}</td>
+                    <td class="px-4 py-2">{{ item.AdminUsername }}</td>
+                    <td class="px-4 py-2">{{ item.Action }}</td>
+                    <td class="px-4 py-2">{{ item.Details }}</td>
                 </tr>
                 {% endfor %}
                 {% else %}
