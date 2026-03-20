@@ -85,7 +85,7 @@ type Friendship struct {
 type UserToken struct {
 	ID         int64     `json:"id" gorm:"primaryKey"`
 	UserID     int64     `json:"user_id" gorm:"index;not null"`
-	Token      string    `json:"token" gorm:"uniqueIndex;size:255;not null"`
+	Token      string    `json:"token" gorm:"index;size:255;not null"`
 	DeviceType string    `json:"device_type" gorm:"size:50"`
 	DeviceID   string    `json:"device_id" gorm:"size:100"`
 	IP         string    `json:"ip" gorm:"size:50"`
