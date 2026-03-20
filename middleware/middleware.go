@@ -21,31 +21,33 @@ func SetRedisClient(client *redis.Client) {
 	RedisClient = client
 }
 
-// Auth JWT 认证中间件
+// Auth JWT 认证中间件 - 支持Header和Cookie两种方式
 func Auth(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var tokenString string
+
+		// 优先从Header获取
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": 401,
-				"msg":  "缺少 Authorization 头",
-			})
-			c.Abort()
-			return
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			}
 		}
 
-		// 解析 Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": 401,
-				"msg":  "无效的 Authorization 格式",
-			})
-			c.Abort()
-			return
+		// 如果Header没有，尝试从Cookie获取
+		if tokenString == "" {
+			tokenCookie, err := c.Cookie("token")
+			if err != nil || tokenCookie == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"code": 401,
+					"msg":  "缺少认证信息，请先登录",
+				})
+				c.Abort()
+				return
+			}
+			tokenString = tokenCookie
 		}
-
-		tokenString := parts[1]
 
 		// 检查 token 是否在黑名单（如果 Redis 已初始化）
 		if RedisClient != nil {

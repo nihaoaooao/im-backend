@@ -3,7 +3,9 @@ package admin
 import (
 	"html/template"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"im-backend/model"
@@ -13,6 +15,41 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
+
+// [SECURITY] SQL注入防护：过滤搜索关键词中的特殊字符
+func sanitizeSearchKeyword(keyword string) string {
+	// 移除可能导致SQL注入的特殊字符
+	// 允许：中文、字母、数字、下划线、空格、@、.
+	re := regexp.MustCompile(`[;'\"\\%--\x00-\x1F]`)
+	sanitized := re.ReplaceAllString(keyword, "")
+	// 限制最大长度
+	if len(sanitized) > 100 {
+		sanitized = sanitized[:100]
+	}
+	return strings.TrimSpace(sanitized)
+}
+
+// [SECURITY] XSS防护：HTML转义函数
+func escapeHTML(s string) string {
+	var builder strings.Builder
+	for _, r := range s {
+		switch r {
+		case '<':
+			builder.WriteString("&lt;")
+		case '>':
+			builder.WriteString("&gt;")
+		case '"':
+			builder.WriteString("&quot;")
+		case '\'':
+			builder.WriteString("&#39;")
+		case '&':
+			builder.WriteString("&amp;")
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
 
 // AdminHandler 管理后台处理器
 type AdminHandler struct {
@@ -47,14 +84,12 @@ type DashboardStats struct {
 
 // Render 渲染模板
 func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interface{}) {
+	// [SECURITY] 使用template/html而不是template/js来防止XSS
 	tmpl := template.Must(template.ParseGlob("admin/templates/*.html"))
 	tmpl = template.Must(tmpl.ParseGlob("admin/templates/**/*.html"))
 
-	// 添加自定义函数
+	// 添加自定义函数 - [SECURITY] 移除不安全的json函数，使用html模板
 	funcMap := template.FuncMap{
-		"json": func(v interface{}) template.JS {
-			return template.JS(toJSON(v))
-		},
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
 		},
@@ -63,6 +98,10 @@ func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interfac
 		},
 		"sub": func(a, b int) int {
 			return a - b
+		},
+		// [SECURITY] 安全的HTML转义函数
+		"escape": func(s string) string {
+			return escapeHTML(s)
 		},
 	}
 
@@ -122,7 +161,8 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 func (h *AdminHandler) Users(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize := 20
-	keyword := c.Query("keyword")
+	// [SECURITY] SQL注入防护：过滤搜索关键词
+	keyword := sanitizeSearchKeyword(c.Query("keyword"))
 	role := c.Query("role")
 	status := c.Query("status")
 
@@ -135,7 +175,9 @@ func (h *AdminHandler) Users(c *gin.Context) {
 
 	query := h.db.Model(&model.User{})
 	if keyword != "" {
-		query = query.Where("username LIKE ? OR nickname LIKE ? OR email LIKE ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+		// [SECURITY] 使用过滤后的关键词
+		escapedKeyword := "%" + escapeHTML(keyword) + "%"
+		query = query.Where("username LIKE ? OR nickname LIKE ? OR email LIKE ?", escapedKeyword, escapedKeyword, escapedKeyword)
 	}
 	if role != "" {
 		query = query.Where("role = ?", role)
@@ -234,7 +276,8 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 func (h *AdminHandler) Groups(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize := 20
-	groupName := c.Query("name")
+	// [SECURITY] SQL注入防护：过滤搜索关键词
+	groupName := sanitizeSearchKeyword(c.Query("name"))
 	groupType := c.Query("type")
 
 	if page < 1 {
@@ -246,7 +289,9 @@ func (h *AdminHandler) Groups(c *gin.Context) {
 
 	query := h.db.Model(&model.Conversation{})
 	if groupName != "" {
-		query = query.Where("name LIKE ?", "%"+groupName+"%")
+		// [SECURITY] 使用过滤后的关键词
+		escapedName := "%" + escapeHTML(groupName) + "%"
+		query = query.Where("name LIKE ?", escapedName)
 	}
 	if groupType != "" {
 		query = query.Where("type = ?", groupType)

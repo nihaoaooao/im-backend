@@ -155,9 +155,10 @@ func main() {
 			c.Redirect(http.StatusFound, "/admin")
 		})
 
-		// 需要登录的页面
+		// 需要管理员权限的页面
 		adminPage := adminRouter.Group("/")
 		adminPage.Use(middleware.Auth(cfg.JWTSecret))
+		adminPage.Use(middleware.RequireAdmin()) // [SECURITY] 必须验证管理员角色
 		{
 			adminPage.GET("", adminHandler.Dashboard)
 			adminPage.GET("/", adminHandler.Dashboard)
