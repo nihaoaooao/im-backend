@@ -109,13 +109,25 @@ func main() {
 	// API 路由
 	api := r.Group("/api")
 	{
-		// 认证路由
+		// 认证路由 - PT-005: 添加速率限制
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", userService.Register)
-			auth.POST("/login", userService.Login)
+			// 注册：3次/分钟
+			auth.POST("/register", middleware.RateLimitByIP(3), userService.Register)
+			// 登录：5次/分钟
+			auth.POST("/login", middleware.RateLimitByIP(5), userService.Login)
 			auth.POST("/refresh", userService.RefreshToken)
 			auth.POST("/logout", middleware.Auth(cfg.JWTSecret), userService.Logout)
+		}
+
+		// PT-002: 管理员路由 - 需要 admin 角色
+		admin := api.Group("/admin")
+		admin.Use(middleware.Auth(cfg.JWTSecret))
+		admin.Use(middleware.RequireAdmin())
+		{
+			admin.GET("/users", userService.ListUsers)
+			admin.GET("/users/:id", userService.GetUser)
+			admin.DELETE("/users/:id", userService.DeleteUser)
 		}
 
 		// 用户路由（需要认证）

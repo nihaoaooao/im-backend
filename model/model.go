@@ -7,6 +7,7 @@ type User struct {
 	ID           int64     `json:"id" gorm:"primaryKey"`
 	Username     string    `json:"username" gorm:"uniqueIndex;size:50;not null"`
 	PasswordHash string    `json:"-" gorm:"size:255;not null"`
+	Role         string    `json:"role" gorm:"size:20;default:'user'"` // admin, user
 	Email        string    `json:"email" gorm:"size:100"`
 	Phone        string    `json:"phone" gorm:"size:20"`
 	Nickname     string    `json:"nickname" gorm:"size:100"`

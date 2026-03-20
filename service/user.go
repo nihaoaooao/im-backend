@@ -124,7 +124,7 @@ func (s *UserService) Register(c *gin.Context) {
 	}
 
 	// 生成 Token
-	token, _ := s.generateToken(user.ID, user.Username)
+	token, _ := s.generateToken(user.ID, user.Username, user.Role)
 
 	c.JSON(200, gin.H{
 		"code": 0,
@@ -231,7 +231,7 @@ func (s *UserService) Login(c *gin.Context) {
 	}
 
 	// 生成 JWT token
-	token, err := s.generateToken(user.ID, user.Username)
+	token, err := s.generateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 500, "msg": "生成 Token 失败"})
 		return
@@ -314,7 +314,7 @@ func (s *UserService) RefreshToken(c *gin.Context) {
 	}
 
 	// 生成新 Token
-	token, err := s.generateToken(userID, username)
+	token, err := s.generateToken(userID, username, user.Role)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 500, "msg": "刷新 Token 失败"})
 		return
@@ -615,10 +615,15 @@ func (s *UserService) GetFriendRequests(c *gin.Context) {
 }
 
 // generateToken 生成 JWT Token
-func (s *UserService) generateToken(userID int64, username string) (string, error) {
+func (s *UserService) generateToken(userID int64, username string, role string) (string, error) {
+	// 默认角色为 user
+	if role == "" {
+		role = "user"
+	}
 	claims := jwt.MapClaims{
 		"user_id":  userID,
 		"username": username,
+		"role":     role, // PT-002: JWT Token 包含角色信息
 		"exp":      time.Now().Add(time.Hour * time.Duration(s.jwtExpire)).Unix(),
 		"iat":      time.Now().Unix(),
 	}
@@ -685,6 +690,86 @@ func (s *UserService) Logout(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"code": 0, "msg": "退出成功"})
+}
+
+// ============ PT-002: 管理员接口 ============
+
+// ListUsers 获取用户列表（管理员）
+func (s *UserService) ListUsers(c *gin.Context) {
+	page := 1
+	pageSize := 20
+	if p := c.Query("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if ps := c.Query("page_size"); ps != "" {
+		fmt.Sscanf(ps, "%d", &pageSize)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 100 || pageSize < 1 {
+		pageSize = 20
+	}
+
+	var users []model.User
+	var total int64
+
+	s.db.Model(&model.User{}).Count(&total)
+	err := s.db.Offset((page - 1) * pageSize).Limit(pageSize).Find(&users).Error
+	if err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "获取用户列表失败"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"users":     users,
+			"total":     total,
+			"page":      page,
+			"page_size": pageSize,
+		},
+	})
+}
+
+// GetUser 获取用户详情（管理员）
+func (s *UserService) GetUser(c *gin.Context) {
+	var id int64
+	if _, err := fmt.Sscanf(c.Param("id"), "%d", &id); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "无效的用户ID"})
+		return
+	}
+
+	var user model.User
+	if err := s.db.First(&user, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": 404, "msg": "用户不存在"})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": 0, "data": user})
+}
+
+// DeleteUser 删除用户（管理员）
+func (s *UserService) DeleteUser(c *gin.Context) {
+	var id int64
+	if _, err := fmt.Sscanf(c.Param("id"), "%d", &id); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "无效的用户ID"})
+		return
+	}
+
+	// 不能删除自己
+	currentUserID, _ := c.Get("user_id")
+	if currentID, ok := currentUserID.(int64); ok && currentID == id {
+		c.JSON(400, gin.H{"code": 400, "msg": "不能删除自己的账号"})
+		return
+	}
+
+	if err := s.db.Delete(&model.User{}, id).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "删除用户失败"})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": 0, "msg": "删除成功"})
 }
 
 // 错误定义
