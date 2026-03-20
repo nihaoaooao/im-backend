@@ -84,10 +84,6 @@ type DashboardStats struct {
 
 // Render 渲染模板
 func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interface{}) {
-	// [SECURITY] 使用template/html而不是template/js来防止XSS
-	tmpl := template.Must(template.ParseGlob("admin/templates/*.html"))
-	tmpl = template.Must(tmpl.ParseGlob("admin/templates/**/*.html"))
-
 	// 添加自定义函数 - [SECURITY] 移除不安全的json函数，使用html模板
 	funcMap := template.FuncMap{
 		"formatTime": func(t time.Time) string {
@@ -105,7 +101,19 @@ func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interfac
 		},
 	}
 
-	tmpl = tmpl.Funcs(funcMap)
+	// 只加载需要的模板文件，而不是加载所有模板
+	// 这样可以避免 Jinja2 语法模板导致的解析错误
+	tmplFiles := map[string]string{
+		"login.html":        "admin/templates/login.html",
+		"dashboard.html":    "admin/templates/dashboard.html",
+		"users/list.html":   "admin/templates/users/list.html",
+		"groups/list.html":  "admin/templates/groups/list.html",
+		"messages/list.html": "admin/templates/messages/list.html",
+		"stats/users.html":  "admin/templates/stats/users.html",
+		"settings/system.html": "admin/templates/settings/system.html",
+	}
+
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(tmplFiles[templateFile]))
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	tmpl.ExecuteTemplate(c.Writer, templateFile, data)
 }
