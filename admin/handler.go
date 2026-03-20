@@ -101,19 +101,38 @@ func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interfac
 		},
 	}
 
-	// 只加载需要的模板文件，而不是加载所有模板
-	// 这样可以避免 Jinja2 语法模板导致的解析错误
+	// 加载需要的模板文件，login.html不需要base.html，其他页面需要继承base.html
 	tmplFiles := map[string]string{
 		"login.html":        "admin/templates/login.html",
-		"dashboard.html":    "admin/templates/dashboard.html",
-		"users/list.html":   "admin/templates/users/list.html",
-		"groups/list.html":  "admin/templates/groups/list.html",
-		"messages/list.html": "admin/templates/messages/list.html",
-		"stats/users.html":  "admin/templates/stats/users.html",
-		"settings/system.html": "admin/templates/settings/system.html",
+		"dashboard.html":    "admin/templates/base.html",
+		"users/list.html":   "admin/templates/base.html",
+		"groups/list.html":  "admin/templates/base.html",
+		"messages/list.html": "admin/templates/base.html",
+		"stats/users.html":  "admin/templates/base.html",
+		"settings/system.html": "admin/templates/base.html",
 	}
 
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(tmplFiles[templateFile]))
+	// 加载基础模板和目标模板
+	basePath := "admin/templates/base.html"
+	templatePath := tmplFiles[templateFile]
+	
+	var tmpl *template.Template
+	
+	// 登录页只加载自己，其他页面加载base+目标
+	if templateFile == "login.html" {
+		tmpl = template.Must(template.New("").Funcs(funcMap).ParseFiles(templatePath))
+	} else {
+		// 需要找到具体的目标模板文件
+		specificFiles := map[string]string{
+			"dashboard.html":    "admin/templates/dashboard.html",
+			"users/list.html":   "admin/templates/users/list.html",
+			"groups/list.html":  "admin/templates/groups/list.html",
+			"messages/list.html": "admin/templates/messages/list.html",
+			"stats/users.html":  "admin/templates/stats/users.html",
+			"settings/system.html": "admin/templates/settings/system.html",
+		}
+		tmpl = template.Must(template.New("").Funcs(funcMap).ParseFiles(basePath, specificFiles[templateFile]))
+	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	tmpl.ExecuteTemplate(c.Writer, templateFile, data)
 }
