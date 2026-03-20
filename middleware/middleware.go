@@ -39,9 +39,18 @@ func Auth(secret string) gin.HandlerFunc {
 		if tokenString == "" {
 			tokenCookie, err := c.Cookie("token")
 			if err != nil || tokenCookie == "" {
-				// 检测是否是浏览器请求（Accept包含html）
+				// 智能判断请求类型：浏览器请求重定向，API请求返回JSON
 				accept := c.GetHeader("Accept")
-				if strings.Contains(accept, "text/html") {
+				shouldRedirect := false
+				if accept != "" {
+					shouldRedirect = strings.Contains(strings.ToLower(accept), "text/html")
+				} else {
+					// 无Accept头时，根据路径判断
+					path := c.Request.URL.Path
+					shouldRedirect = strings.HasPrefix(path, "/admin/") || path == "/admin"
+				}
+				
+				if shouldRedirect {
 					c.Redirect(http.StatusFound, "/admin/login")
 				} else {
 					c.JSON(http.StatusUnauthorized, gin.H{
@@ -61,7 +70,15 @@ func Auth(secret string) gin.HandlerFunc {
 			_, err := RedisClient.Get(context.Background(), blacklistKey).Result()
 			if err == nil {
 				accept := c.GetHeader("Accept")
-				if strings.Contains(accept, "text/html") {
+				shouldRedirect := false
+				if accept != "" {
+					shouldRedirect = strings.Contains(strings.ToLower(accept), "text/html")
+				} else {
+					path := c.Request.URL.Path
+					shouldRedirect = strings.HasPrefix(path, "/admin/") || path == "/admin"
+				}
+				
+				if shouldRedirect {
 					c.Redirect(http.StatusFound, "/admin/login")
 				} else {
 					c.JSON(http.StatusUnauthorized, gin.H{
@@ -85,7 +102,15 @@ func Auth(secret string) gin.HandlerFunc {
 
 		if err != nil || !token.Valid {
 			accept := c.GetHeader("Accept")
-			if strings.Contains(accept, "text/html") {
+			shouldRedirect := false
+			if accept != "" {
+				shouldRedirect = strings.Contains(strings.ToLower(accept), "text/html")
+			} else {
+				path := c.Request.URL.Path
+				shouldRedirect = strings.HasPrefix(path, "/admin/") || path == "/admin"
+			}
+			
+			if shouldRedirect {
 				c.Redirect(http.StatusFound, "/admin/login")
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{
