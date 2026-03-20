@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>控制台 - IM 管理后台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { background-color: #f3f4f6; }
+        .sidebar { min-height: 100vh; }
+        .sidebar a:hover, .sidebar a.active { background-color: #1e293b; }
+        .card { border-radius: 0.5rem; }
+        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+        .table-action-btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="flex">
+        <!-- 侧边栏 -->
+        <aside class="w-64 bg-slate-800 text-white flex-shrink-0 fixed h-full">
+            <div class="p-4 border-b border-slate-700">
+                <h1 class="text-xl font-bold"><i class="bi bi-chat-dots-fill me-2 text-blue-400"></i>IM 管理后台</h1>
+            </div>
+            <nav class="mt-2">
+                <a href="/admin" class="block py-3 px-4 active bg-slate-700 text-white">
+                    <i class="bi bi-house-door me-2"></i>控制台
+                </a>
+                <a href="/admin/users" class="block py-3 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-people me-2"></i>用户管理
+                </a>
+                <a href="/admin/groups" class="block py-3 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-collection me-2"></i>群组管理
+                </a>
+                <a href="/admin/messages" class="block py-3 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-chat-square-text me-2"></i>消息管理
+                </a>
+                <a href="/admin/stats" class="block py-3 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-bar-chart-line me-2"></i>数据统计
+                </a>
+                <a href="/admin/settings" class="block py-3 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-gear me-2"></i>系统设置
+                </a>
+            </nav>
+            <div class="absolute bottom-0 w-64 p-4 border-t border-slate-700">
+                <a href="/admin/logout" class="block py-2 px-4 text-slate-300 hover:text-white">
+                    <i class="bi bi-box-arrow-right me-2"></i>退出登录
+                </a>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 p-6 ml-64">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-gray-800"><i class="bi bi-speedometer2 me-2 text-blue-500"></i>控制台</h1>
+                <span class="text-sm text-gray-500"><i class="bi bi-clock me-1"></i>更新时间: {{.Stats.TotalUsers}}</span>
+            </div>
+
+            <!-- 今日数据概览 -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3"><i class="bi bi-lightning-charge me-2 text-yellow-500"></i>今日数据</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow p-4 text-white stat-card">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-blue-100 text-sm">今日新增用户</p>
+                                <h3 class="text-3xl font-bold">{{.Stats.TodayUsers}}</h3>
+                            </div>
+                            <i class="bi bi-person-plus text-4xl text-blue-300"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg shadow p-4 text-white stat-card">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-green-100 text-sm">今日新增群组</p>
+                                <h3 class="text-3xl font-bold">{{.Stats.TodayGroups}}</h3>
+                            </div>
+                            <i class="bi bi-people-fill text-4xl text-green-300"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg shadow p-4 text-white stat-card">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-purple-100 text-sm">今日消息量</p>
+                                <h3 class="text-3xl font-bold">{{.Stats.TodayMessages}}</h3>
+                            </div>
+                            <i class="bi bi-chat-left-text-fill text-4xl text-purple-300"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg shadow p-4 text-white stat-card">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-orange-100 text-sm">今日登录用户</p>
+                                <h3 class="text-3xl font-bold">{{.Stats.TodayLogin}}</h3>
+                            </div>
+                            <i class="bi bi-person-check-fill text-4xl text-orange-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 累计统计数据 -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3"><i class="bi bi-database me-2 text-blue-500"></i>累计统计</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-gray-500 text-sm">总用户数</p>
+                                <h3 class="text-2xl font-bold text-gray-800">{{.Stats.TotalUsers}}</h3>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                <i class="bi bi-people text-xl text-blue-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-green-500">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-gray-500 text-sm">群组数</p>
+                                <h3 class="text-2xl font-bold text-gray-800">{{.Stats.TotalGroups}}</h3>
+                            </div>
+                            <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                <i class="bi bi-collection text-xl text-green-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-red-500">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-gray-500 text-sm">消息总数</p>
+                                <h3 class="text-2xl font-bold text-gray-800">{{.Stats.TotalMessages}}</h3>
+                            </div>
+                            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                                <i class="bi bi-chat-dots text-xl text-red-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-yellow-500">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-gray-500 text-sm">在线用户</p>
+                                <h3 class="text-2xl font-bold text-gray-800">{{.Stats.OnlineUsers}}</h3>
+                            </div>
+                            <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                                <i class="bi bi-person-check text-xl text-yellow-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 图表区域 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-5">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800"><i class="bi bi-graph-up me-2 text-blue-500"></i>消息趋势（最近7天）</h3>
+                    <canvas id="messageChart" height="200"></canvas>
+                </div>
+                <div class="bg-white rounded-lg shadow p-5">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800"><i class="bi bi-person-plus me-2 text-green-500"></i>用户注册趋势（最近7天）</h3>
+                    <canvas id="userChart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- 最近操作日志 -->
+            <div class="bg-white rounded-lg shadow p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-800"><i class="bi bi-clock-history me-2 text-gray-500"></i>最近操作日志</h3>
+                    <a href="/admin/logs" class="text-blue-500 hover:text-blue-700 text-sm">查看全部 <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">时间</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">管理员</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">操作</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">详情</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{if .Logs}}
+                            {{range .Logs}}
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-3 text-gray-600"><i class="bi bi-clock me-1"></i>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</td>
+                                <td class="px-4 py-3"><span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{{.AdminUsername}}</span></td>
+                                <td class="px-4 py-3 text-gray-800">{{.Action}}</td>
+                                <td class="px-4 py-3 text-gray-500">{{.Details}}</td>
+                            </tr>
+                            {{end}}
+                            {{else}}
+                            <tr>
+                                <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                                    <i class="bi bi-inbox text-4xl mb-2 block"></i>
+                                    暂无日志记录
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 页脚 -->
+            <div class="mt-6 text-center text-gray-400 text-sm">
+                <p>IM Backend &copy; 2026 | 基于 Go + Gin + Vue 构建</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 消息趋势图
+        const msgCtx = document.getElementById('messageChart').getContext('2d');
+        new Chart(msgCtx, {
+            type: 'line',
+            data: {
+                labels: [{{range $i, $d := .Stats.Dates}}{{if $i}},{{end}}"{{$d}}"{{end}}],
+                datasets: [{
+                    label: '消息数',
+                    data: [{{range $i, $c := .Stats.MessageCounts}}{{if $i}},{{end}}{{$c}}{{end}}],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#3b82f6',
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: '#f3f4f6' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+
+        // 用户注册趋势图
+        const userCtx = document.getElementById('userChart').getContext('2d');
+        new Chart(userCtx, {
+            type: 'bar',
+            data: {
+                labels: [{{range $i, $d := .Stats.Dates}}{{if $i}},{{end}}"{{$d}}"{{end}}],
+                datasets: [{
+                    label: '注册用户数',
+                    data: [{{range $i, $c := .Stats.UserCounts}}{{if $i}},{{end}}{{$c}}{{end}}],
+                    backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                    borderColor: '#22c55e',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    barThickness: 20
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: '#f3f4f6' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -74,17 +74,22 @@ type PageData struct {
 
 // DashboardStats 控制台统计数据
 type DashboardStats struct {
-	TotalUsers      int64   `json:"total_users"`
-	TotalGroups     int64   `json:"total_groups"`
-	TotalMessages   int64   `json:"total_messages"`
-	OnlineUsers     int64   `json:"online_users"`
-	Dates           []string `json:"dates"`
-	MessageCounts   []int64  `json:"message_counts"`
+	TotalUsers      int64   `json:"total_users"`       // 总用户数
+	TotalGroups     int64   `json:"total_groups"`      // 总群组数
+	TotalMessages   int64   `json:"total_messages"`    // 总消息数
+	OnlineUsers     int64   `json:"online_users"`      // 在线用户数
+	TodayUsers      int64   `json:"today_users"`       // 今日新增用户
+	TodayGroups     int64   `json:"today_groups"`     // 今日新增群组
+	TodayMessages   int64   `json:"today_messages"`    // 今日消息数
+	TodayLogin      int64   `json:"today_login"`       // 今日登录用户
+	Dates           []string `json:"dates"`            // 日期列表
+	MessageCounts   []int64  `json:"message_counts"`  // 消息数量趋势
+	UserCounts      []int64  `json:"user_counts"`     // 用户注册趋势
 }
 
 // Render 渲染模板
 func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interface{}) {
-	// 添加自定义函数 - [SECURITY] 移除不安全的json函数，使用html模板
+	// 添加自定义函数
 	funcMap := template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
@@ -95,78 +100,96 @@ func (h *AdminHandler) Render(c *gin.Context, templateFile string, data interfac
 		"sub": func(a, b int) int {
 			return a - b
 		},
-		// [SECURITY] 安全的HTML转义函数
 		"escape": func(s string) string {
 			return escapeHTML(s)
 		},
 	}
 
-	// 加载需要的模板文件，login.html不需要base.html，其他页面需要继承base.html
-	tmplFiles := map[string]string{
-		"login.html":        "admin/templates/login.html",
-		"dashboard.html":    "admin/templates/base.html",
-		"users/list.html":   "admin/templates/base.html",
-		"groups/list.html":  "admin/templates/base.html",
-		"messages/list.html": "admin/templates/base.html",
-		"stats/users.html":  "admin/templates/base.html",
-		"settings/system.html": "admin/templates/base.html",
+	c.Header("Content-Type", "text/html; charset=utf-8")
+
+	// 登录页单独处理
+	if templateFile == "login.html" {
+		tmpl := template.Must(template.New("login.html").Funcs(funcMap).ParseFiles("admin/templates/login.html"))
+		tmpl.Execute(c.Writer, data)
+		return
 	}
 
-	// 加载基础模板和目标模板
-	basePath := "admin/templates/base.html"
-	templatePath := tmplFiles[templateFile]
-	
-	var tmpl *template.Template
-	
-	// 登录页只加载自己，其他页面加载base+目标
-	if templateFile == "login.html" {
-		tmpl = template.Must(template.New("").Funcs(funcMap).ParseFiles(templatePath))
-	} else {
-		// 需要找到具体的目标模板文件
-		specificFiles := map[string]string{
-			"dashboard.html":    "admin/templates/dashboard.html",
-			"users/list.html":   "admin/templates/users/list.html",
-			"groups/list.html":  "admin/templates/groups/list.html",
-			"messages/list.html": "admin/templates/messages/list.html",
-			"stats/users.html":  "admin/templates/stats/users.html",
-			"settings/system.html": "admin/templates/settings/system.html",
-		}
-		tmpl = template.Must(template.New("").Funcs(funcMap).ParseFiles(basePath, specificFiles[templateFile]))
+	// 其他页面：加载独立HTML模板（不使用继承）
+	subTemplates := map[string]string{
+		"dashboard.html":       "admin/templates/dashboard_simple.html",
+		"users/list.html":      "admin/templates/users/list.html",
+		"groups/list.html":     "admin/templates/groups/list.html",
+		"messages/list.html":   "admin/templates/messages/list.html",
+		"stats/users.html":     "admin/templates/stats/users.html",
+		"settings/system.html": "admin/templates/settings/system.html",
 	}
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	tmpl.ExecuteTemplate(c.Writer, templateFile, data)
+
+	subTmplFile := subTemplates[templateFile]
+	if subTmplFile == "" {
+		c.Writer.Write([]byte("模板不存在"))
+		return
+	}
+
+	// 加载子模板（独立HTML，不使用继承）
+	tmpl := template.Must(template.New(templateFile).Funcs(funcMap).ParseFiles(subTmplFile))
+
+	// 执行模板
+	tmpl.Execute(c.Writer, data)
 }
 
 // Dashboard 控制台首页
 func (h *AdminHandler) Dashboard(c *gin.Context) {
 	var totalUsers, totalGroups, totalMessages int64
-	var onlineUsers int64
+	var onlineUsers, todayUsers, todayGroups, todayMessages, todayLogin int64
 
+	// 基础统计
 	h.db.Model(&model.User{}).Count(&totalUsers)
 	h.db.Model(&model.Conversation{}).Where("type = ?", "group").Count(&totalGroups)
 	h.db.Model(&model.Message{}).Count(&totalMessages)
 
+	// 在线用户数
 	if h.redis != nil {
 		onlineUsers, _ = h.redis.SCard(c.Request.Context(), "online:users").Result()
 	}
 
-	// 最近7天消息趋势
+	// 今日统计
+	today := time.Now()
+	todayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+
+	h.db.Model(&model.User{}).Where("created_at >= ?", todayStart).Count(&todayUsers)
+	h.db.Model(&model.Conversation{}).Where("type = ? AND created_at >= ?", "group", todayStart).Count(&todayGroups)
+	h.db.Model(&model.Message{}).Where("created_at >= ?", todayStart).Count(&todayMessages)
+
+	// 今日登录用户数（通过检查用户表的last_login_at）
+	h.db.Model(&model.User{}).Where("last_login_at >= ?", todayStart).Count(&todayLogin)
+
+	// 最近7天趋势数据
 	var dates []string
 	var messageCounts []int64
+	var userCounts []int64
 	for i := 6; i >= 0; i-- {
-		date := time.Now().AddDate(0, 0, -i)
+		date := today.AddDate(0, 0, -i)
 		dates = append(dates, date.Format("01-02"))
-		
-		var count int64
+
 		startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 		endOfDay := startOfDay.AddDate(0, 0, 1)
-		h.db.Model(&model.Message{}).Where("created_at BETWEEN ? AND ?", startOfDay, endOfDay).Count(&count)
-		messageCounts = append(messageCounts, count)
+
+		// 消息数
+		var msgCount int64
+		h.db.Model(&model.Message{}).Where("created_at BETWEEN ? AND ?", startOfDay, endOfDay).Count(&msgCount)
+		messageCounts = append(messageCounts, msgCount)
+
+		// 注册用户数
+		var userCount int64
+		h.db.Model(&model.User{}).Where("created_at BETWEEN ? AND ?", startOfDay, endOfDay).Count(&userCount)
+		userCounts = append(userCounts, userCount)
 	}
 
-	// 最近操作日志
+	// 最近操作日志 - 添加错误处理，避免表不存在时页面空白
 	var logs []model.AdminLog
-	h.db.Order("created_at DESC").Limit(10).Find(&logs)
+	if err := h.db.Order("created_at DESC").Limit(10).Find(&logs).Error; err != nil {
+		logs = []model.AdminLog{}
+	}
 
 	data := PageData{
 		ActivePage: "dashboard",
@@ -175,8 +198,13 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 			TotalGroups:   totalGroups,
 			TotalMessages: totalMessages,
 			OnlineUsers:   onlineUsers,
+			TodayUsers:    todayUsers,
+			TodayGroups:   todayGroups,
+			TodayMessages: todayMessages,
+			TodayLogin:    todayLogin,
 			Dates:         dates,
 			MessageCounts: messageCounts,
+			UserCounts:    userCounts,
 		},
 		Logs: logs,
 	}
