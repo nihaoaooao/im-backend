@@ -91,4 +91,29 @@ type UserToken struct {
 	IP         string    `json:"ip" gorm:"size:50"`
 	ExpiresAt  time.Time `json:"expires_at"`
 	CreatedAt  time.Time `json:"created_at"`
+	LoginCount int64     `json:"login_count" gorm:"default:0"` // 登录次数
+}
+
+// AdminLog 管理操作日志模型
+type AdminLog struct {
+	ID              int64     `json:"id" gorm:"primaryKey"`
+	AdminID         int64     `json:"admin_id" gorm:"index;not null"`
+	AdminUsername   string    `json:"admin_username" gorm:"size:50;not null"`
+	Action          string    `json:"action" gorm:"size:50;not null"` // ban_user, unban_user, dismiss_group, revoke_message
+	TargetType      string    `json:"target_type" gorm:"size:50;not null"` // user, group, message
+	TargetID        int64     `json:"target_id" gorm:"not null"`
+	Details         string    `json:"details" gorm:"type:text"`
+	IP              string    `json:"ip" gorm:"size:50"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// SensitiveWord 敏感词模型
+type SensitiveWord struct {
+	ID        int64     `json:"id" gorm:"primaryKey"`
+	Word      string    `json:"word" gorm:"uniqueIndex;size:100;not null"`
+	Type      string    `json:"type" gorm:"size:20;default:text"` // text, image, file
+	Level     string    `json:"level" gorm:"size:20;default:block"` // warning, block
+	Status    string    `json:"status" gorm:"size:20;default:active"` // active, inactive
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

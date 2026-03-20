@@ -772,8 +772,165 @@ func (s *UserService) DeleteUser(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 0, "msg": "删除成功"})
 }
 
+// BanUser 禁用用户（管理员）
+// @Summary 禁用用户
+// @Description 管理员禁用指定用户
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Param id path int true "用户ID"
+// @Param request body BanUserRequest true "禁用请求"
+// @Success 0 {object} gin.H
+// @Router /api/admin/users/{id}/ban [post]
+func (s *UserService) BanUser(c *gin.Context) {
+	var id int64
+	if _, err := fmt.Sscanf(c.Param("id"), "%d", &id); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "无效的用户ID"})
+		return
+	}
+
+	var req struct {
+		Reason  string    `json:"reason"`
+		BanUntil time.Time `json:"ban_until"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Reason = "违反用户协议" // 默认原因
+	}
+
+	// 查找用户
+	var user model.User
+	if err := s.db.First(&user, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": 404, "msg": "用户不存在"})
+		return
+	}
+
+	// 不能禁用自己
+	currentUserID, _ := c.Get("user_id")
+	if currentID, ok := currentUserID.(int64); ok && currentID == id {
+		c.JSON(400, gin.H{"code": 400, "msg": "不能禁用自己的账号"})
+		return
+	}
+
+	// 检查用户是否已经是禁用状态
+	if user.Status == "banned" {
+		c.JSON(400, gin.H{"code": 400, "msg": "用户已被禁用"})
+		return
+	}
+
+	// 更新用户状态
+	updates := map[string]interface{}{
+		"status":     "banned",
+		"updated_at": time.Now(),
+	}
+	if req.Reason != "" {
+		updates["status"] = "banned" // 可以扩展为存储禁言原因
+	}
+
+	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "禁用用户失败"})
+		return
+	}
+
+	// 记录管理日志
+	s.recordAdminLog(c, "ban_user", "user", id, req.Reason)
+
+	// 如果用户在线，强制下线
+	if s.hub != nil {
+		s.hub.SendToUser(id, gin.H{
+			"type": "system",
+			"data": gin.H{
+				"message": "账号已被禁用",
+			},
+		})
+	}
+
+	c.JSON(200, gin.H{"code": 0, "msg": "用户已禁用"})
+}
+
+// UnbanUser 解封用户（管理员）
+// @Summary 解封用户
+// @Description 管理员解封指定用户
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Param id path int true "用户ID"
+// @Success 0 {object} gin.H
+// @Router /api/admin/users/{id}/unban [post]
+func (s *UserService) UnbanUser(c *gin.Context) {
+	var id int64
+	if _, err := fmt.Sscanf(c.Param("id"), "%d", &id); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "无效的用户ID"})
+		return
+	}
+
+	// 查找用户
+	var user model.User
+	if err := s.db.First(&user, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": 404, "msg": "用户不存在"})
+		return
+	}
+
+	// 检查用户是否是禁用状态
+	if user.Status != "banned" {
+		c.JSON(400, gin.H{"code": 400, "msg": "用户未被禁用"})
+		return
+	}
+
+	// 更新用户状态
+	if err := s.db.Model(&user).Updates(map[string]interface{}{
+		"status":     "active",
+		"updated_at": time.Now(),
+	}).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "解封用户失败"})
+		return
+	}
+
+	// 记录管理日志
+	s.recordAdminLog(c, "unban_user", "user", id, "解封用户")
+
+	c.JSON(200, gin.H{"code": 0, "msg": "用户已解封"})
+}
+
+// recordAdminLog 记录管理操作日志
+func (s *UserService) recordAdminLog(c *gin.Context, action, targetType string, targetID int64, details string) {
+	adminID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+
+	adminLog := model.AdminLog{
+		AdminID:       adminID.(int64),
+		AdminUsername: username.(string),
+		Action:        action,
+		TargetType:    targetType,
+		TargetID:      targetID,
+		Details:       details,
+		IP:            c.ClientIP(),
+		CreatedAt:     time.Now(),
+	}
+
+	s.db.Create(&adminLog)
+}
+
 // 错误定义
 var (
 	ErrUserNotFound     = errors.New("user not found")
 	ErrInvalidPassword = errors.New("invalid password")
 )
+
+// VerifyPassword 验证密码（公开方法）
+func (s *UserService) VerifyPassword(passwordHash, password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
+}
+
+// GenerateTokenForAdmin 生成管理员 Token（公开方法）
+func (s *UserService) GenerateTokenForAdmin(userID int64, username string, jwtSecret string, jwtExpire int) (string, error) {
+	claims := jwt.MapClaims{
+		"user_id":  userID,
+		"username": username,
+		"role":     "admin",
+		"exp":      time.Now().Add(time.Hour * time.Duration(jwtExpire)).Unix(),
+		"iat":      time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(jwtSecret))
+}

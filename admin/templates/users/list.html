@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - IM 管理后台{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold"><i class="bi bi-people me-2"></i>用户管理</h1>
+</div>
+
+<!-- 搜索和筛选 -->
+<div class="bg-white rounded-lg shadow p-4 mb-6">
+    <form method="get" class="flex gap-4">
+        <input type="text" name="keyword" value="{{ .Keyword }}" placeholder="搜索用户名/昵称/邮箱" 
+               class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select name="role" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">全部角色</option>
+            <option value="admin" {% if .Role == "admin" %}selected{% endif %}>管理员</option>
+            <option value="user" {% if .Role == "user" %}selected{% endif %}>普通用户</option>
+        </select>
+        <select name="status" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">全部状态</option>
+            <option value="active" {% if .Status == "active" %}selected{% endif %}>正常</option>
+            <option value="banned" {% if .Status == "banned" %}selected{% endif %}>已封禁</option>
+        </select>
+        <button type="submit" class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+            <i class="bi bi-search me-1"></i>搜索
+        </button>
+    </form>
+</div>
+
+<!-- 用户列表 -->
+<div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="w-full">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用户名</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">昵称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">邮箱</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">角色</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">注册时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+            {% if .Users %}
+            {% for user := range .Users %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ user.ID }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">{{ user.Username }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ user.Nickname }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">{{ user.Email }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if user.Role == "admin" %}
+                    <span class="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded">管理员</span>
+                    {% else %}
+                    <span class="px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-700 rounded">用户</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if user.Status == "banned" %}
+                    <span class="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded">已封禁</span>
+                    {% else %}
+                    <span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">正常</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatTime user.CreatedAt }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    {% if user.Status != "banned" %}
+                    <button onclick="banUser({{ user.ID }})" class="table-action-btn bg-red-500 text-white rounded hover:bg-red-600 mr-1">
+                        封禁
+                    </button>
+                    {% else %}
+                    <button onclick="unbanUser({{ user.ID }})" class="table-action-btn bg-green-500 text-white rounded hover:bg-green-600 mr-1">
+                        解封
+                    </button>
+                    {% endif %}
+                    <button onclick="deleteUser({{ user.ID }})" class="table-action-btn bg-gray-500 text-white rounded hover:bg-gray-600">
+                        删除
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td colspan="8" class="px-6 py-8 text-center text-gray-500">暂无数据</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 分页 -->
+{% if .TotalPages > 1 %}
+<div class="flex justify-center items-center mt-6 gap-2">
+    {% if .Page > 1 %}
+    <a href="?page={{ sub .Page 1 }}&keyword={{ .Keyword }}&role={{ .Role }}&status={{ .Status }}" 
+       class="px-4 py-2 bg-white rounded shadow hover:bg-gray-50">上一页</a>
+    {% endif %}
+    
+    <span class="px-4 py-2">第 {{ .Page }} / {{ .TotalPages }} 页</span>
+    
+    {% if .Page < .TotalPages %}
+    <a href="?page={{ add .Page 1 }}&keyword={{ .Keyword }}&role={{ .Role }}&status={{ .Status }}" 
+       class="px-4 py-2 bg-white rounded shadow hover:bg-gray-50">下一页</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- 操作确认弹窗 -->
+<div id="actionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-lg font-bold mb-4" id="modalTitle">确认操作</h3>
+        <p class="text-gray-600 mb-6" id="modalContent"></p>
+        <form id="actionForm" method="post">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">操作原因</label>
+                <textarea name="reason" rows="3" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">取消</button>
+                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">确认</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function banUser(id) {
+    document.getElementById('modalTitle').textContent = '封禁用户';
+    document.getElementById('modalContent').textContent = '确定要封禁该用户吗？封禁后用户将无法登录。';
+    document.getElementById('actionForm').action = '/admin/users/' + id + '/ban';
+    document.getElementById('actionModal').classList.remove('hidden');
+}
+
+function unbanUser(id) {
+    document.getElementById('modalTitle').textContent = '解封用户';
+    document.getElementById('modalContent').textContent = '确定要解封该用户吗？';
+    document.getElementById('actionForm').action = '/admin/users/' + id + '/unban';
+    document.getElementById('actionModal').classList.remove('hidden');
+}
+
+function deleteUser(id) {
+    if (!confirm('确定要删除该用户吗？此操作不可恢复！')) return;
+    window.location.href = '/admin/users/' + id + '/delete';
+}
+
+function closeModal() {
+    document.getElementById('actionModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

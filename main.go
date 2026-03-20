@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"im-backend/admin"
 	"im-backend/config"
 	"im-backend/middleware"
 	"im-backend/model"
@@ -17,8 +18,6 @@ import (
 	"im-backend/ws"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -51,6 +50,10 @@ func main() {
 
 	// 设置用户服务的 Hub
 	userService.SetHub(hub)
+
+	// 初始化管理后台服务
+	adminService := service.NewAdminService(db, redisClient, hub)
+	adminService.SetHub(hub)
 
 	// ============ 初始化消息队列服务 ============
 	// 创建消息处理器
@@ -106,6 +109,75 @@ func main() {
 	r.Use(middleware.Recovery())
 	middleware.SetRedisClient(redisClient)
 
+	// 初始化管理后台处理器
+	adminHandler := admin.NewAdminHandler(db, redisClient)
+
+	// 管理后台页面路由
+	adminRouter := r.Group("/admin")
+	{
+		// 登录页面
+		adminRouter.GET("/login", adminHandler.Login)
+		adminRouter.POST("/login", func(c *gin.Context) {
+			username := c.PostForm("username")
+			password := c.PostForm("password")
+
+			// 查找用户
+			var user model.User
+			if err := db.Where("username = ?", username).First(&user).Error; err != nil {
+				adminHandler.Render(c, "login.html", gin.H{"Error": "用户不存在"})
+				return
+			}
+
+			// 验证密码
+			if err := userService.VerifyPassword(user.PasswordHash, password); err != nil {
+				adminHandler.Render(c, "login.html", gin.H{"Error": "密码错误"})
+				return
+			}
+
+			// 检查是否是管理员
+			if user.Role != "admin" {
+				adminHandler.Render(c, "login.html", gin.H{"Error": "只有管理员才能登录后台"})
+				return
+			}
+
+			// 生成 token
+			token, err := userService.GenerateTokenForAdmin(user.ID, user.Username, cfg.JWTSecret, cfg.JWTExpire)
+			if err != nil {
+				adminHandler.Render(c, "login.html", gin.H{"Error": "登录失败"})
+				return
+			}
+
+			// 设置 cookie
+			c.SetCookie("token", token, 3600*24*7, "/", "", false, false)
+			c.Set("user_id", user.ID)
+			c.Set("username", user.Username)
+
+			c.Redirect(http.StatusFound, "/admin")
+		})
+
+		// 需要登录的页面
+		adminPage := adminRouter.Group("/")
+		adminPage.Use(middleware.Auth(cfg.JWTSecret))
+		{
+			adminPage.GET("", adminHandler.Dashboard)
+			adminPage.GET("/", adminHandler.Dashboard)
+			adminPage.GET("/users", adminHandler.Users)
+			adminPage.POST("/users/:id/ban", adminHandler.BanUser)
+			adminPage.POST("/users/:id/unban", adminHandler.UnbanUser)
+			adminPage.GET("/users/:id/delete", adminHandler.DeleteUser)
+			adminPage.GET("/groups", adminHandler.Groups)
+			adminPage.GET("/groups/:id", adminHandler.GetGroup)
+			adminPage.POST("/groups/:id/dismiss", adminHandler.DismissGroup)
+			adminPage.GET("/messages", adminHandler.Messages)
+			adminPage.POST("/messages/:id/revoke", adminHandler.RevokeMessage)
+			adminPage.GET("/stats", adminHandler.Stats)
+			adminPage.GET("/settings", adminHandler.Settings)
+		}
+
+		// 退出登录
+		adminRouter.GET("/logout", adminHandler.Logout)
+	}
+
 	// API 路由
 	api := r.Group("/api")
 	{
@@ -125,9 +197,29 @@ func main() {
 		admin.Use(middleware.Auth(cfg.JWTSecret))
 		admin.Use(middleware.RequireAdmin())
 		{
+			// 用户管理
 			admin.GET("/users", userService.ListUsers)
 			admin.GET("/users/:id", userService.GetUser)
 			admin.DELETE("/users/:id", userService.DeleteUser)
+			admin.POST("/users/:id/ban", userService.BanUser)
+			admin.POST("/users/:id/unban", userService.UnbanUser)
+
+			// 群组管理
+			admin.GET("/groups", adminService.ListGroups)
+			admin.GET("/groups/:id", adminService.GetGroup)
+			admin.POST("/groups/:id/dismiss", adminService.DismissGroup)
+
+			// 消息管理
+			admin.GET("/messages", adminService.ListMessages)
+			admin.POST("/messages/:id/revoke", adminService.RevokeMessage)
+
+			// 系统监控
+			admin.GET("/online-users", adminService.GetOnlineUsers)
+			admin.GET("/metrics", adminService.GetMetrics)
+
+			// 数据统计
+			admin.GET("/stats/users", adminService.GetUserStats)
+			admin.GET("/stats/messages", adminService.GetMessageStats)
 		}
 
 		// 用户路由（需要认证）
@@ -227,9 +319,6 @@ func main() {
 
 	// WebSocket 路由（通过 Gin）
 	r.GET("/ws", ws.HandleWebSocketHTTP(hub, cfg.JWTSecret))
-
-	// Swagger 文档路由
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}控制台 - IM 管理后台{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6"><i class="bi bi-speedometer2 me-2"></i>控制台</h1>
+
+<!-- 统计卡片 -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-gray-500 text-sm">总用户数</p>
+                <h3 class="text-2xl font-bold">{{ .Stats.TotalUsers }}</h3>
+            </div>
+            <i class="bi bi-people text-4xl text-blue-200"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-green-500">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-gray-500 text-sm">群组数</p>
+                <h3 class="text-2xl font-bold">{{ .Stats.TotalGroups }}</h3>
+            </div>
+            <i class="bi bi-collection text-4xl text-green-200"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-red-500">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-gray-500 text-sm">消息总数</p>
+                <h3 class="text-2xl font-bold">{{ .Stats.TotalMessages }}</h3>
+            </div>
+            <i class="bi bi-chat-dots text-4xl text-red-200"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5 border-l-4 border-yellow-500">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-gray-500 text-sm">在线用户</p>
+                <h3 class="text-2xl font-bold">{{ .Stats.OnlineUsers }}</h3>
+            </div>
+            <i class="bi bi-person-check text-4xl text-yellow-200"></i>
+        </div>
+    </div>
+</div>
+
+<!-- 系统状态 -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4"><i class="bi bi-pc-display me-2"></i>系统状态</h3>
+        <table class="w-full">
+            <tr class="border-b">
+                <td class="py-2 text-gray-600">数据库</td>
+                <td class="py-2"><span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">正常</span></td>
+            </tr>
+            <tr class="border-b">
+                <td class="py-2 text-gray-600">Redis</td>
+                <td class="py-2"><span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">正常</span></td>
+            </tr>
+            <tr class="border-b">
+                <td class="py-2 text-gray-600">WebSocket</td>
+                <td class="py-2"><span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">正常</span></td>
+            </tr>
+            <tr>
+                <td class="py-2 text-gray-600">消息队列</td>
+                <td class="py-2"><span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">运行中</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4"><i class="bi bi-graph-up me-2"></i>消息趋势（最近7天）</h3>
+        <canvas id="messageChart" height="150"></canvas>
+    </div>
+</div>
+
+<!-- 最近操作日志 -->
+<div class="bg-white rounded-lg shadow p-5 mt-6">
+    <h3 class="text-lg font-bold mb-4"><i class="bi bi-clock-history me-2"></i>最近操作日志</h3>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left">时间</th>
+                    <th class="px-4 py-2 text-left">管理员</th>
+                    <th class="px-4 py-2 text-left">操作</th>
+                    <th class="px-4 py-2 text-left">详情</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if .Logs %}
+                {% for log := range .Logs %}
+                <tr class="border-b">
+                    <td class="px-4 py-2">{{ formatTime log.CreatedAt }}</td>
+                    <td class="px-4 py-2">{{ log.AdminUsername }}</td>
+                    <td class="px-4 py-2">{{ log.Action }}</td>
+                    <td class="px-4 py-2">{{ log.Details }}</td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="4" class="px-4 py-4 text-center text-gray-500">暂无日志</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 消息趋势图表
+    const ctx = document.getElementById('messageChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ .Stats.Dates | json }},
+            datasets: [{
+                label: '消息数',
+                data: {{ .Stats.MessageCounts | json }},
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+</script>
+{% endblock %}

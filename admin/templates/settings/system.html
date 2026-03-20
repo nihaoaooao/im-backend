@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - IM 管理后台{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6"><i class="bi bi-gear me-2"></i>系统设置</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 基础设置 -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4">基础设置</h3>
+        <form method="post" action="/admin/settings/general">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">系统名称</label>
+                <input type="text" name="system_name" value="{{ .Settings.SystemName }}" 
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">允许注册</label>
+                <select name="allow_register" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="true" {% if .Settings.AllowRegister %}selected{% endif %}>开启</option>
+                    <option value="false" {% if !.Settings.AllowRegister %}selected{% endif %}>关闭</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">默认用户角色</label>
+                <select name="default_role" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="user" {% if .Settings.DefaultRole == "user" %}selected{% endif %}>普通用户</option>
+                </select>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+        </form>
+    </div>
+
+    <!-- 安全设置 -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4">安全设置</h3>
+        <form method="post" action="/admin/settings/security">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">密码最小长度</label>
+                <input type="number" name="password_min_length" value="{{ .Settings.PasswordMinLength }}" min="6" max="32"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Token 有效期（小时）</label>
+                <input type="number" name="token_expire_hours" value="{{ .Settings.TokenExpireHours }}" min="1" max="720"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">最大登录失败次数</label>
+                <input type="number" name="max_login_failures" value="{{ .Settings.MaxLoginFailures }}" min="3" max="10"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+        </form>
+    </div>
+
+    <!-- 消息设置 -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4">消息设置</h3>
+        <form method="post" action="/admin/settings/message">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">最大消息长度</label>
+                <input type="number" name="max_message_length" value="{{ .Settings.MaxMessageLength }}" min="100" max="10000"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">最大文件大小（MB）</label>
+                <input type="number" name="max_file_size" value="{{ .Settings.MaxFileSize }}" min="1" max="100"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">允许撤回时间（分钟）</label>
+                <input type="number" name="revoke_time_limit" value="{{ .Settings.RevokeTimeLimit }}" min="1" max="1440"
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+        </form>
+    </div>
+
+    <!-- 敏感词管理 -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-lg font-bold mb-4">敏感词管理</h3>
+        <form method="post" action="/admin/settings/keywords">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">敏感词列表（每行一个）</label>
+                <textarea name="sensitive_words" rows="8" 
+                          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="每行一个敏感词">{{ range .Settings.SensitiveWords }}{{ . }}
+{{ end }}</textarea>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
