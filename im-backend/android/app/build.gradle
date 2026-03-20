@@ -33,7 +33,9 @@ android {
         buildConfigField "String", "WS_URL", "\"${localProperties.getProperty('ws.url', 'wss://129.226.74.230/ws')}\""
         buildConfigField "String", "SERVER_HOST", "\"${localProperties.getProperty('server.host', '129.226.74.230')}\""
         buildConfigField "int", "REQUEST_TIMEOUT", localProperties.getProperty('request.timeout', '30')
-        buildConfigField "boolean", "CERTIFICATE_PINNING_ENABLED", localProperties.getProperty('certificate.pinning.enabled', 'true')
+        // 测试环境禁用证书锁定（使用 IP 地址没有标准证书）
+        // 生产环境：设置为 true（配置域名和 SSL 证书后）
+        buildConfigField "boolean", "CERTIFICATE_PINNING_ENABLED", localProperties.getProperty('certificate.pinning.enabled', 'false')
 
         // ⚠️ 安全警告：必须替换为真实的服务器证书指纹！
         // 获取方法：

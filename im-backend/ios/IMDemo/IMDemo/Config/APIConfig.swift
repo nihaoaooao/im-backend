@@ -85,11 +85,14 @@ struct APIConfig {
     }()
     
     /// 是否启用证书锁定
+    /// ⚠️ 测试环境：暂时禁用（使用 IP 地址没有标准证书）
+    /// 生产环境：必须启用（配置域名和 SSL 证书后）
     static let isCertificatePinningEnabled: Bool = {
-        if let enabled = infoDictionary["CERTIFICATE_PINNING_ENABLED"] as? Bool {
-            return enabled
-        }
-        return true
+        #if DEBUG
+        return false  // 测试环境禁用
+        #else
+        return true   // 生产环境启用
+        #endif
     }()
     
     /// 是否启用调试日志
