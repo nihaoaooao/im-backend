@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IM 管理后台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f5f6fa; }
+        .sidebar { min-height: 100vh; background: #2c3e50; }
+        .sidebar a { color: #ecf0f1; text-decoration: none; padding: 12px 20px; display: block; }
+        .sidebar a:hover, .sidebar a.active { background: #34495e; border-left: 3px solid #3498db; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .stat-card { border-left: 4px solid; }
+        .stat-card.users { border-color: #3498db; }
+        .stat-card.groups { border-color: #2ecc71; }
+        .stat-card.messages { border-color: #e74c3c; }
+        .stat-card.online { border-color: #f39c12; }
+        .table-actions .btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+        .loading { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 9999; }
+        .loading.show { display: flex; }
+        .loading spinner { width: 3rem; height: 3rem; }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner-border text-light" role="status"><span class="visually-hidden">加载中...</span></div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <div class="col-md-2 sidebar p-0">
+                <div class="text-center py-3 border-bottom border-secondary">
+                    <h5 class="text-white mb-0"><i class="bi bi-speedometer2"></i> IM 管理后台</h5>
+                </div>
+                <nav class="mt-2">
+                    <a href="#" class="active" data-page="dashboard"><i class="bi bi-house-door me-2"></i> 控制台</a>
+                    <a href="#" data-page="users"><i class="bi bi-people me-2"></i> 用户管理</a>
+                    <a href="#" data-page="groups"><i class="bi bi-collection me-2"></i> 群组管理</a>
+                    <a href="#" data-page="messages"><i class="bi bi-chat-dots me-2"></i> 消息管理</a>
+                    <a href="#" data-page="stats"><i class="bi bi-bar-chart me-2"></i> 数据统计</a>
+                </nav>
+                <div class="position-absolute bottom-0 w-100">
+                    <a href="#" onclick="logout()"><i class="bi bi-box-arrow-right me-2"></i> 退出登录</a>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="col-md-10 p-4">
+                <!-- 登录界面 -->
+                <div id="loginPage" class="row justify-content-center mt-5" style="display:none">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body p-4">
+                                <h4 class="text-center mb-4">管理员登录</h4>
+                                <div class="mb-3">
+                                    <label class="form-label">用户名</label>
+                                    <input type="text" class="form-control" id="loginUsername">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">密码</label>
+                                    <input type="password" class="form-control" id="loginPassword">
+                                </div>
+                                <button class="btn btn-primary w-100" onclick="login()">登录</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 控制台 -->
+                <div id="dashboardPage">
+                    <h4 class="mb-4"><i class="bi bi-speedometer2 me-2"></i>控制台</h4>
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card stat-card users p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted">总用户数</div>
+                                        <h3 class="mb-0" id="totalUsers">-</h3>
+                                    </div>
+                                    <i class="bi bi-people fs-1 text-primary opacity-25"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card stat-card groups p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted">群组数</div>
+                                        <h3 class="mb-0" id="totalGroups">-</h3>
+                                    </div>
+                                    <i class="bi bi-collection fs-1 text-success opacity-25"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card stat-card messages p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted">消息总数</div>
+                                        <h3 class="mb-0" id="totalMessages">-</h3>
+                                    </div>
+                                    <i class="bi bi-chat-dots fs-1 text-danger opacity-25"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card stat-card online p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted">在线用户</div>
+                                        <h3 class="mb-0" id="onlineUsers">-</h3>
+                                    </div>
+                                    <i class="bi bi-person-check fs-1 text-warning opacity-25"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5>系统状态</h5>
+                                    <table class="table table-borderless">
+                                        <tr><td>数据库</td><td><span class="badge bg-success">正常</span></td></tr>
+                                        <tr><td>Redis</td><td><span class="badge bg-success">正常</span></td></tr>
+                                        <tr><td>WebSocket</td><td><span class="badge bg-success">正常</span></td></tr>
+                                        <tr><td>消息队列</td><td><span class="badge bg-success">运行中</span></td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5>最近操作日志</h5>
+                                    <div id="adminLogs" class="small text-muted">暂无日志</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 用户管理 -->
+                <div id="usersPage" style="display:none">
+                    <h4 class="mb-4"><i class="bi bi-people me-2"></i>用户管理</h4>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control" placeholder="搜索用户名..." id="userSearch">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-primary" onclick="loadUsers()">搜索</button>
+                                </div>
+                            </div>
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>用户名</th>
+                                        <th>昵称</th>
+                                        <th>邮箱</th>
+                                        <th>角色</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTable"></tbody>
+                            </table>
+                            <nav><ul class="pagination" id="usersPagination"></ul></nav>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 群组管理 -->
+                <div id="groupsPage" style="display:none">
+                    <h4 class="mb-4"><i class="bi bi-collection me-2"></i>群组管理</h4>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control" placeholder="搜索群组名..." id="groupSearch">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-primary" onclick="loadGroups()">搜索</button>
+                                </div>
+                            </div>
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>群名称</th>
+                                        <th>群主</th>
+                                        <th>成员数</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="groupsTable"></tbody>
+                            </table>
+                            <nav><ul class="pagination" id="groupsPagination"></ul></nav>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 消息管理 -->
+                <div id="messagesPage" style="display:none">
+                    <h4 class="mb-4"><i class="bi bi-chat-dots me-2"></i>消息管理</h4>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control" placeholder="用户ID" id="msgUserId">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control" placeholder="会话ID" id="msgConversationId">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-primary" onclick="loadMessages()">搜索</button>
+                                </div>
+                            </div>
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>发送者</th>
+                                        <th>内容</th>
+                                        <th>类型</th>
+                                        <th>时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="messagesTable"></tbody>
+                            </table>
+                            <nav><ul class="pagination" id="messagesPagination"></ul></nav>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据统计 -->
+                <div id="statsPage" style="display:none">
+                    <h4 class="mb-4"><i class="bi bi-bar-chart me-2"></i>数据统计</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label>开始日期</label>
+                                    <input type="date" class="form-control" id="statsStartDate">
+                                </div>
+                                <div class="col-md-4">
+                                    <label>结束日期</label>
+                                    <input type="date" class="form-control" id="statsEndDate">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-primary" onclick="loadStats()">查询</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5>用户统计</h5>
+                                    <div id="userStats">
+                                        <p>总用户: <span id="statTotalUsers">-</span></p>
+                                        <p>新增用户: <span id="statNewUsers">-</span></p>
+                                        <p>活跃用户: <span id="statActiveUsers">-</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5>消息统计</h5>
+                                    <div id="messageStats">
+                                        <p>总消息: <span id="statTotalMessages">-</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = 'http://129.226.74.230:8080';
+        let token = localStorage.getItem('adminToken');
+
+        // 检查登录状态
+        function checkAuth() {
+            if (!token) {
+                document.getElementById('loginPage').style.display = 'flex';
+                document.getElementById('dashboardPage').style.display = 'none';
+                document.querySelector('.col-md-10').style.display = 'none';
+            } else {
+                showPage('dashboard');
+                loadDashboard();
+            }
+        }
+
+        // 登录
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                
+                if (data.code === 0) {
+                    token = data.data.token;
+                    localStorage.setItem('adminToken', token);
+                    checkAuth();
+                } else {
+                    alert(data.msg || '登录失败');
+                }
+            } catch (e) {
+                alert('登录失败: ' + e.message);
+            }
+        }
+
+        // 退出
+        function logout() {
+            localStorage.removeItem('adminToken');
+            token = null;
+            location.reload();
+        }
+
+        // 显示页面
+        function showPage(page) {
+            document.querySelectorAll('.col-md-10 > div[id$="Page"]').forEach(p => p.style.display = 'none');
+            document.getElementById(page + 'Page').style.display = 'block';
+            
+            document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+            document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+
+            if (page === 'dashboard') loadDashboard();
+            if (page === 'users') loadUsers();
+            if (page === 'groups') loadGroups();
+            if (page === 'messages') loadMessages();
+        }
+
+        // 侧边栏导航
+        document.querySelectorAll('.sidebar a[data-page]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                showPage(a.dataset.page);
+            });
+        });
+
+        // 加载控制台
+        async function loadDashboard() {
+            try {
+                const [usersRes, groupsRes, messagesRes, onlineRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/admin/users?page=1&page_size=1`, {headers: {'Authorization': 'Bearer ' + token}}),
+                    fetch(`${API_BASE}/api/admin/groups?page=1&page_size=1`, {headers: {'Authorization': 'Bearer ' + token}}),
+                    fetch(`${API_BASE}/api/admin/messages?page=1&page_size=1`, {headers: {'Authorization': 'Bearer ' + token}}),
+                    fetch(`${API_BASE}/api/admin/online-users`, {headers: {'Authorization': 'Bearer ' + token}})
+                ]);
+
+                const usersData = await usersRes.json();
+                const groupsData = await groupsRes.json();
+                const messagesData = await messagesRes.json();
+                const onlineData = await onlineRes.json();
+
+                document.getElementById('totalUsers').textContent = usersData.data?.total || 0;
+                document.getElementById('totalGroups').textContent = groupsData.data?.total || 0;
+                document.getElementById('totalMessages').textContent = messagesData.data?.total || 0;
+                document.getElementById('onlineUsers').textContent = onlineData.data?.total || 0;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // 加载用户
+        async function loadUsers(page = 1) {
+            showLoading(true);
+            try {
+                const search = document.getElementById('userSearch').value;
+                const res = await fetch(`${API_BASE}/api/admin/users?page=${page}&page_size=20&keyword=${search}`, {
+                    headers: {'Authorization': 'Bearer ' + token}
+                });
+                const data = await res.json();
+                
+                let html = '';
+                data.data?.users?.forEach(u => {
+                    html += `<tr>
+                        <td>${u.id}</td>
+                        <td>${u.username}</td>
+                        <td>${u.nickname || '-'}</td>
+                        <td>${u.email || '-'}</td>
+                        <td><span class="badge ${u.role === 'admin' ? 'bg-danger' : 'bg-primary'}">${u.role}</span></td>
+                        <td><span class="badge ${u.status === 'active' ? 'bg-success' : 'bg-warning'}">${u.status}</span></td>
+                        <td class="table-actions">
+                            <button class="btn btn-sm btn-danger" onclick="banUser(${u.id})">封禁</button>
+                        </td>
+                    </tr>`;
+                });
+                document.getElementById('usersTable').innerHTML = html;
+            } catch (e) {
+                alert('加载失败');
+            }
+            showLoading(false);
+        }
+
+        // 封禁用户
+        async function banUser(id) {
+            if (!confirm('确定要封禁该用户吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/users/${id}/ban`, {
+                    method: 'POST',
+                    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+                    body: JSON.stringify({reason: '管理员操作'})
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    alert('已封禁');
+                    loadUsers();
+                } else {
+                    alert(data.msg);
+                }
+            } catch (e) {
+                alert('操作失败');
+            }
+        }
+
+        // 加载群组
+        async function loadGroups(page = 1) {
+            showLoading(true);
+            try {
+                const search = document.getElementById('groupSearch').value;
+                const res = await fetch(`${API_BASE}/api/admin/groups?page=${page}&page_size=20&name=${search}`, {
+                    headers: {'Authorization': 'Bearer ' + token}
+                });
+                const data = await res.json();
+                
+                let html = '';
+                data.data?.groups?.forEach(g => {
+                    html += `<tr>
+                        <td>${g.id}</td>
+                        <td>${g.name}</td>
+                        <td>${g.owner_name}</td>
+                        <td>${g.member_count}</td>
+                        <td>${new Date(g.created_at).toLocaleDateString()}</td>
+                        <td class="table-actions">
+                            <button class="btn btn-sm btn-danger" onclick="dismissGroup(${g.id})">解散</button>
+                        </td>
+                    </tr>`;
+                });
+                document.getElementById('groupsTable').innerHTML = html;
+            } catch (e) {
+                alert('加载失败');
+            }
+            showLoading(false);
+        }
+
+        // 解散群组
+        async function dismissGroup(id) {
+            if (!confirm('确定要解散该群组吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/groups/${id}/dismiss`, {
+                    method: 'POST',
+                    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+                    body: JSON.stringify({reason: '管理员操作'})
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    alert('已解散');
+                    loadGroups();
+                } else {
+                    alert(data.msg);
+                }
+            } catch (e) {
+                alert('操作失败');
+            }
+        }
+
+        // 加载消息
+        async function loadMessages(page = 1) {
+            showLoading(true);
+            try {
+                const userId = document.getElementById('msgUserId').value;
+                const convId = document.getElementById('msgConversationId').value;
+                let url = `${API_BASE}/api/admin/messages?page=${page}&page_size=20`;
+                if (userId) url += `&user_id=${userId}`;
+                if (convId) url += `&conversation_id=${convId}`;
+                
+                const res = await fetch(url, {headers: {'Authorization': 'Bearer ' + token}});
+                const data = await res.json();
+                
+                let html = '';
+                data.data?.messages?.forEach(m => {
+                    html += `<tr>
+                        <td>${m.id}</td>
+                        <td>${m.sender_username}</td>
+                        <td>${m.content.substring(0, 30)}${m.content.length > 30 ? '...' : ''}</td>
+                        <td>${m.content_type}</td>
+                        <td>${new Date(m.created_at).toLocaleString()}</td>
+                        <td class="table-actions">
+                            <button class="btn btn-sm btn-warning" onclick="revokeMessage(${m.id})">撤回</button>
+                        </td>
+                    </tr>`;
+                });
+                document.getElementById('messagesTable').innerHTML = html;
+            } catch (e) {
+                alert('加载失败');
+            }
+            showLoading(false);
+        }
+
+        // 撤回消息
+        async function revokeMessage(id) {
+            if (!confirm('确定要撤回该消息吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/messages/${id}/revoke`, {
+                    method: 'POST',
+                    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+                    body: JSON.stringify({reason: '管理员操作'})
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    alert('已撤回');
+                    loadMessages();
+                } else {
+                    alert(data.msg);
+                }
+            } catch (e) {
+                alert('操作失败');
+            }
+        }
+
+        // 加载统计
+        async function loadStats() {
+            const startDate = document.getElementById('statsStartDate').value;
+            const endDate = document.getElementById('statsEndDate').value;
+            
+            if (!startDate || !endDate) {
+                alert('请选择日期');
+                return;
+            }
+
+            try {
+                const [userRes, msgRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/admin/stats/users?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: {'Authorization': 'Bearer ' + token}
+                    }),
+                    fetch(`${API_BASE}/api/admin/stats/messages?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: {'Authorization': 'Bearer ' + token}
+                    })
+                ]);
+
+                const userData = await userRes.json();
+                const msgData = await msgRes.json();
+
+                document.getElementById('statTotalUsers').textContent = userData.data?.total_users || 0;
+                document.getElementById('statNewUsers').textContent = userData.data?.new_users || 0;
+                document.getElementById('statActiveUsers').textContent = userData.data?.active_users || 0;
+                document.getElementById('statTotalMessages').textContent = msgData.data?.total_messages || 0;
+            } catch (e) {
+                alert('加载失败');
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+        }
+
+        // 初始化
+        window.onload = function() {
+            // 设置默认日期
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+            document.getElementById('statsStartDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+            document.getElementById('statsEndDate').value = today.toISOString().split('T')[0];
+            
+            checkAuth();
+        };
+    </script>
+</body>
+</html>
