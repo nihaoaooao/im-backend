@@ -161,7 +161,6 @@ func main() {
 		adminPage.Use(middleware.RequireAdmin()) // [SECURITY] 必须验证管理员角色
 		{
 			adminPage.GET("", adminHandler.Dashboard)
-			adminPage.GET("/", adminHandler.Dashboard)
 			adminPage.GET("/users", adminHandler.Users)
 			adminPage.POST("/users/:id/ban", adminHandler.BanUser)
 			adminPage.POST("/users/:id/unban", adminHandler.UnbanUser)
