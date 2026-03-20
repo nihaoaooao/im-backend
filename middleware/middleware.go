@@ -39,10 +39,16 @@ func Auth(secret string) gin.HandlerFunc {
 		if tokenString == "" {
 			tokenCookie, err := c.Cookie("token")
 			if err != nil || tokenCookie == "" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"code": 401,
-					"msg":  "缺少认证信息，请先登录",
-				})
+				// 检测是否是浏览器请求（Accept包含html）
+				accept := c.GetHeader("Accept")
+				if strings.Contains(accept, "text/html") {
+					c.Redirect(http.StatusFound, "/admin/login")
+				} else {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"code": 401,
+						"msg":  "缺少认证信息，请先登录",
+					})
+				}
 				c.Abort()
 				return
 			}
@@ -54,10 +60,15 @@ func Auth(secret string) gin.HandlerFunc {
 			blacklistKey := "token:blacklist:" + tokenString
 			_, err := RedisClient.Get(context.Background(), blacklistKey).Result()
 			if err == nil {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"code": 401,
-					"msg":  "Token 已失效",
-				})
+				accept := c.GetHeader("Accept")
+				if strings.Contains(accept, "text/html") {
+					c.Redirect(http.StatusFound, "/admin/login")
+				} else {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"code": 401,
+						"msg":  "Token 已失效",
+					})
+				}
 				c.Abort()
 				return
 			}
@@ -73,10 +84,15 @@ func Auth(secret string) gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code": 401,
-				"msg":  "无效的 Token",
-			})
+			accept := c.GetHeader("Accept")
+			if strings.Contains(accept, "text/html") {
+				c.Redirect(http.StatusFound, "/admin/login")
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"code": 401,
+					"msg":  "无效的 Token",
+				})
+			}
 			c.Abort()
 			return
 		}
